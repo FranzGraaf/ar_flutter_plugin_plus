@@ -1,4 +1,4 @@
-package io.carius.lars.ar_flutter_plugin
+package com.example.ar_flutter_plugin
 
 import android.app.Activity
 import android.content.Context
