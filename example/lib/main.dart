@@ -106,7 +106,7 @@ class ExampleList extends StatelessWidget {
           'Place 3D objects on planes and take screenshots',
           () => Navigator.push(context,
               MaterialPageRoute(builder: (context) => ScreenshotWidget()))),
-      Example(
+      /*Example(
           'Cloud Anchors',
           'Place and retrieve 3D objects using the Google Cloud Anchor API',
           () => Navigator.push(context,
@@ -117,7 +117,7 @@ class ExampleList extends StatelessWidget {
           () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (context) => ExternalModelManagementWidget())))
+                  builder: (context) => ExternalModelManagementWidget())))*/
     ];
     return ListView(
       children:
