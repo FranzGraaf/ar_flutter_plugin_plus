@@ -45,48 +45,51 @@ class _LocalAndWebObjectsWidgetState extends State<LocalAndWebObjectsWidget> {
         appBar: AppBar(
           title: const Text('Local & Web Objects'),
         ),
-        body: Container(
-            child: Stack(children: [
-          ARView(
-            onARViewCreated: onARViewCreated,
-            planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
-          ),
-          Align(
-              alignment: FractionalOffset.bottomCenter,
-              child:
-                  Column(mainAxisAlignment: MainAxisAlignment.end, children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton(
-                        onPressed: onFileSystemObjectAtOriginButtonPressed,
-                        child: Text("Add/Remove Filesystem\nObject at Origin")),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton(
-                        onPressed: onLocalObjectAtOriginButtonPressed,
-                        child: Text("Add/Remove Local\nObject at Origin")),
-                    ElevatedButton(
-                        onPressed: onWebObjectAtOriginButtonPressed,
-                        child: Text("Add/Remove Web\nObject at Origin")),
-                  ],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    ElevatedButton(
-                        onPressed: onLocalObjectShuffleButtonPressed,
-                        child: Text("Shuffle Local\nobject at Origin")),
-                    ElevatedButton(
-                        onPressed: onWebObjectShuffleButtonPressed,
-                        child: Text("Shuffle Web\nObject at Origin")),
-                  ],
-                )
-              ]))
-        ])));
+        body: SafeArea(
+          child: Container(
+              child: Stack(children: [
+            ARView(
+              onARViewCreated: onARViewCreated,
+              planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
+            ),
+            Align(
+                alignment: FractionalOffset.bottomCenter,
+                child:
+                    Column(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ElevatedButton(
+                          onPressed: onFileSystemObjectAtOriginButtonPressed,
+                          child:
+                              Text("Add/Remove Filesystem\nObject at Origin")),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ElevatedButton(
+                          onPressed: onLocalObjectAtOriginButtonPressed,
+                          child: Text("Add/Remove Local\nObject at Origin")),
+                      ElevatedButton(
+                          onPressed: onWebObjectAtOriginButtonPressed,
+                          child: Text("Add/Remove Web\nObject at Origin")),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ElevatedButton(
+                          onPressed: onLocalObjectShuffleButtonPressed,
+                          child: Text("Shuffle Local\nobject at Origin")),
+                      ElevatedButton(
+                          onPressed: onWebObjectShuffleButtonPressed,
+                          child: Text("Shuffle Web\nObject at Origin")),
+                    ],
+                  )
+                ]))
+          ])),
+        ));
   }
 
   void onARViewCreated(

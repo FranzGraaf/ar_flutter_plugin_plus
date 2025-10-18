@@ -1,4 +1,5 @@
 import 'package:ar_flutter_plugin_example/examples/externalmodelmanagementexample.dart';
+import 'package:ar_flutter_plugin_example/examples/image_marker_tracking.dart';
 import 'package:ar_flutter_plugin_example/examples/objectsonplanesexample.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
@@ -118,6 +119,11 @@ class ExampleList extends StatelessWidget {
               context,
               MaterialPageRoute(
                   builder: (context) => ExternalModelManagementWidget())))*/
+      Example(
+          'Image Marker Tracking',
+          'Place 3D objects on image markers',
+          () => Navigator.push(context,
+              MaterialPageRoute(builder: (context) => ImageMarkerTracking()))),
     ];
     return ListView(
       children:
