@@ -735,7 +735,7 @@ internal class AndroidARView(
                                 null // return null because java expects void return (in java, void has no instance, whereas in Kotlin, this closure returns a Unit which has one instance)
                             }
                 }
-                1 -> { // GLB Model from the web
+                2 -> { // GLB Model from the web
                     modelBuilder.makeNodeFromGlb(viewContext, transformationSystem, objectManagerChannel, enablePans, enableRotation, dict_node["name"] as String, dict_node["uri"] as String, dict_node["transformation"] as ArrayList<Double>)
                             .thenAccept{node ->
                                 val anchorName: String? = dict_anchor?.get("name") as? String
@@ -763,7 +763,7 @@ internal class AndroidARView(
                                 null // return null because java expects void return (in java, void has no instance, whereas in Kotlin, this closure returns a Unit which has one instance)
                             }
                 }
-                2 -> { // fileSystemAppFolderGLB
+                3 -> { // fileSystemAppFolderGLB
                     val documentsPath = viewContext.getApplicationInfo().dataDir
                     val assetPath = documentsPath + "/app_flutter/" + dict_node["uri"] as String
 
@@ -794,7 +794,7 @@ internal class AndroidARView(
                                 null // return null because java expects void return (in java, void has no instance, whereas in Kotlin, this closure returns a Unit which has one instance)
                             }
                 }
-                3 -> { //fileSystemAppFolderGLTF2
+                4 -> { //fileSystemAppFolderGLTF2
                     // Get path to given Flutter asset
                     val documentsPath = viewContext.getApplicationInfo().dataDir
                     val assetPath = documentsPath + "/app_flutter/" + dict_node["uri"] as String

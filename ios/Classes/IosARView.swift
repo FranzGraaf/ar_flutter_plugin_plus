@@ -408,7 +408,37 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
                         promise(.success(false))
                     }
                     break
-                case 1: // GLB Model from the web
+                case 1: // GLB Model from Flutter asset folder
+                    // Get path to given Flutter asset
+                    let key = FlutterDartProject.lookupKey(forAsset: dict_node["uri"] as! String)
+                    // Add object to scene
+                    if let node: SCNNode = self.modelBuilder.makeNodeFromGLB(name: dict_node["name"] as! String, modelPath: key, transformation: dict_node["transformation"] as? Array<NSNumber>) {
+                        if let anchorName = dict_anchor?["name"] as? String, let anchorType = dict_anchor?["type"] as? Int {
+                            switch anchorType{
+                                case 0: //PlaneAnchor
+                                    if let anchor = self.anchorCollection[anchorName]{
+                                        // Attach node to the top-level node of the specified anchor
+                                        self.sceneView.node(for: anchor)?.addChildNode(node)
+                                        promise(.success(true))
+                                    } else {
+                                        promise(.success(false))
+                                    }
+                                default:
+                                    promise(.success(false))
+                                }
+                            
+                        } else {
+                            // Attach to top-level node of the scene
+                            self.sceneView.scene.rootNode.addChildNode(node)
+                            promise(.success(true))
+                        }
+                        promise(.success(false))
+                    } else {
+                        self.sessionManagerChannel.invokeMethod("onError", arguments: ["Unable to load renderable \(dict_node["uri"] as! String)"])
+                        promise(.success(false))
+                    }
+                    break
+                case 2: // GLB Model from the web
                     // Add object to scene
                     self.modelBuilder.makeNodeFromWebGlb(name: dict_node["name"] as! String, modelURL: dict_node["uri"] as! String, transformation: dict_node["transformation"] as? Array<NSNumber>)
                     .sink(receiveCompletion: {
@@ -441,7 +471,7 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
                         }
                     }).store(in: &self.cancellableCollection)
                     break
-                case 2: // GLB Model from the app's documents folder
+                case 3: // GLB Model from the app's documents folder
                     // Get path to given file system asset
                     let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
                     let documentsDirectory = paths[0]
@@ -474,7 +504,7 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
                         promise(.success(false))
                     }
                     break
-                case 3: //fileSystemAppFolderGLTF2
+                case 4: //fileSystemAppFolderGLTF2
                     // Get path to given file system asset
                     let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
                     let documentsDirectory = paths[0]
