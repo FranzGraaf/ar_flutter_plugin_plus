@@ -1,3 +1,5 @@
+import 'dart:developer';
+
 import 'package:ar_flutter_plugin/datatypes/config_planedetection.dart';
 import 'package:ar_flutter_plugin/datatypes/hittest_result_types.dart';
 import 'package:ar_flutter_plugin/datatypes/node_types.dart';
@@ -70,7 +72,8 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
         // Add note to anchor
         var newNode = ARNode(
             type: NodeType.localGLTF2,
-            uri: "Models/Chicken_01/Chicken_01.gltf",
+            uri:
+                "Models/realistic_crystal.glb", //"Models/Chicken_01/Chicken_01.gltf",
             scale: Vector3(0.2, 0.2, 0.2),
             position: Vector3(0.0, 0.0, 0.0),
             rotation: Vector4(1.0, 0.0, 0.0, 0.0));
@@ -87,6 +90,7 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
       }
     } catch (e) {
       // nothing just no plane found
+      log(e.toString());
     }
   }
 
