@@ -46,7 +46,11 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
       customPlaneTexturePath: "Images/triangle.png",
       showWorldOrigin: true,
       handleTaps: true,
-      trackingImagePaths: ["Images/augmented-images-earth.jpg"],
+      trackingImagePaths: [
+        "Images/augmented-images-earth.jpg",
+        "Images/kompass_1.png",
+        "Images/kompass_2.png"
+      ],
     );
     this.arObjectManager!.onInitialize();
     this.arSessionManager!.onPlaneOrPointTap = onPlaneOrPointTapped;
@@ -61,7 +65,7 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
       var newAnchor =
           ARPlaneAnchor(transformation: singleHitTestResult.worldTransform);
       bool? didAddAnchor = await arAnchorManager!.addAnchor(newAnchor);
-      if (didAddAnchor != null && didAddAnchor) {
+      if (didAddAnchor == true) {
         // remove old anchor and node
         if (anchor != null) {
           arAnchorManager!.removeAnchor(anchor!);
@@ -82,7 +86,7 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
         bool? didAddNodeToAnchor =
             await arObjectManager!.addNode(newNode, planeAnchor: newAnchor);
 
-        if (didAddNodeToAnchor != null && didAddNodeToAnchor) {
+        if (didAddNodeToAnchor == true) {
           node = newNode;
         } else {
           arSessionManager!.onError("Adding Node to Anchor failed");
@@ -110,25 +114,33 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
   Future<void> placeObjectOnImage(
       String imageName, Matrix4 transformation) async {
     try {
-      // Remove any existing anchor and node
-      if (anchor != null) {
-        arAnchorManager!.removeAnchor(anchor!);
-      }
-      if (node != null) {
-        arObjectManager!.removeNode(node!);
-      }
-
       // Create a new anchor at the image position
       var imageAnchor = ARPlaneAnchor(transformation: transformation);
 
       bool? didAddAnchor = await arAnchorManager!.addAnchor(imageAnchor);
-      if (didAddAnchor != null && didAddAnchor) {
+      if (didAddAnchor == true) {
+        // Remove any existing anchor and node
+        if (anchor != null) {
+          arAnchorManager?.removeAnchor(anchor!);
+        }
+        if (node != null) {
+          arObjectManager?.removeNode(node!);
+        }
+
         anchor = imageAnchor;
+
+        // chose model url
+        var modelUrl = "Models/realistic_crystal_blues_materials.glb";
+        if (imageName == "kompass_1") {
+          modelUrl = "Models/realistic_crystal.glb";
+        } else if (imageName == "kompass_2") {
+          modelUrl = "Models/sitarbuckss.glb";
+        }
 
         // Create a 3D object to place on the image
         var imageNode = ARNode(
             type: NodeType.localGLB,
-            uri: "Models/realistic_crystal_blues_materials.glb",
+            uri: modelUrl,
             scale: Vector3(0.1, 0.1, 0.1), // Smaller scale for image anchors
             position: Vector3(0.0, 0.0, 0.0),
             rotation: Vector4(1.0, 0.0, 0.0, 0.0));
@@ -136,7 +148,7 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
         bool? didAddNodeToAnchor =
             await arObjectManager!.addNode(imageNode, planeAnchor: imageAnchor);
 
-        if (didAddNodeToAnchor != null && didAddNodeToAnchor) {
+        if (didAddNodeToAnchor == true) {
           node = imageNode;
           print("Successfully placed object on image: $imageName");
         } else {

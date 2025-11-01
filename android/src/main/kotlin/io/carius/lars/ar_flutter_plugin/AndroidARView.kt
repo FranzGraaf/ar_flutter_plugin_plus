@@ -981,20 +981,26 @@ internal class AndroidARView(
         for (augmentedImage in updatedAugmentedImages) {
             when (augmentedImage.trackingState) {
                 TrackingState.TRACKING -> {
-                    // Image is currently being tracked
-                    val imageName = augmentedImage.name ?: "unknown"
-                    val centerPose = augmentedImage.centerPose
-                    
-                    // Convert pose to transformation matrix and send to Flutter
-                    val transformation = serializePose(centerPose)
-                    
-                    val arguments = HashMap<String, Any>()
-                    arguments["imageName"] = imageName
-                    arguments["transformation"] = transformation
-                    
-                    sessionManagerChannel.invokeMethod("onImageDetected", arguments)
-                    
-                    Log.d(TAG, "Image detected: $imageName")
+                    // Additional check: Only proceed if the image has a valid tracking method
+                    // and the tracking confidence is sufficient
+                    if (augmentedImage.trackingMethod == AugmentedImage.TrackingMethod.FULL_TRACKING) {
+                        // Image is currently being tracked with full tracking
+                        val imageName = augmentedImage.name ?: "unknown"
+                        val centerPose = augmentedImage.centerPose
+                        
+                        // Convert pose to transformation matrix and send to Flutter
+                        val transformation = serializePose(centerPose)
+                        
+                        val arguments = HashMap<String, Any>()
+                        arguments["imageName"] = imageName
+                        arguments["transformation"] = transformation
+                        
+                        sessionManagerChannel.invokeMethod("onImageDetected", arguments)
+                        
+                        Log.d(TAG, "Image detected with full tracking: $imageName")
+                    } else {
+                        Log.d(TAG, "Image tracking method not full: ${augmentedImage.name} - ${augmentedImage.trackingMethod}")
+                    }
                 }
                 TrackingState.PAUSED -> {
                     // Image was tracked but is now paused (e.g., moved out of view)
