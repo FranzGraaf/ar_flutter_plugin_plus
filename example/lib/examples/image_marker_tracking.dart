@@ -160,9 +160,14 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
 
   @override
   Widget build(BuildContext context) {
-    return ARView(
-      onARViewCreated: onARViewCreated,
-      planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Image Marker Tracking'),
+      ),
+      body: ARView(
+        onARViewCreated: onARViewCreated,
+        planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
+      ),
     );
   }
 }
