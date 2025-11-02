@@ -1,4 +1,4 @@
-package io.carius.lars.ar_flutter_plugin_plus
+package tech.graaf.franz.ar_flutter_plugin_plus
 
 import android.R
 import android.app.Activity
@@ -20,7 +20,7 @@ import com.google.ar.sceneform.rendering.*
 import com.google.ar.sceneform.utilities.Preconditions
 import com.google.ar.sceneform.ux.*
 
-import io.carius.lars.ar_flutter_plugin_plus.Serialization.*
+import tech.graaf.franz.ar_flutter_plugin_plus.Serialization.*
 
 import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.loader.FlutterLoader

@@ -1,4 +1,4 @@
-package io.carius.lars.ar_flutter_plugin_plus.Serialization
+package tech.graaf.franz.ar_flutter_plugin_plus.Serialization
 
 import com.google.ar.sceneform.math.Quaternion
 import com.google.ar.sceneform.math.Vector3

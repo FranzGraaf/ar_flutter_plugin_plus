@@ -3,11 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-group = "io.carius.lars.ar_flutter_plugin"
+group = "tech.graaf.franz.ar_flutter_plugin_plus"
 version = "1.0-SNAPSHOT"
 
 android {
-    namespace = "io.carius.lars.ar_flutter_plugin"
+    namespace = "tech.graaf.franz.ar_flutter_plugin_plus"
     compileSdk = 34
 
     defaultConfig {

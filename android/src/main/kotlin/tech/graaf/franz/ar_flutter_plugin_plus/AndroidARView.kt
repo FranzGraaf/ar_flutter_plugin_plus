@@ -1,4 +1,4 @@
-package io.carius.lars.ar_flutter_plugin_plus
+package tech.graaf.franz.ar_flutter_plugin_plus
 
 import android.app.Activity
 import android.app.Application
@@ -18,10 +18,10 @@ import com.google.ar.core.exceptions.*
 import com.google.ar.sceneform.*
 import com.google.ar.sceneform.math.Vector3
 import com.google.ar.sceneform.ux.*
-import io.carius.lars.ar_flutter_plugin_plus.Serialization.deserializeMatrix4
-import io.carius.lars.ar_flutter_plugin_plus.Serialization.serializeAnchor
-import io.carius.lars.ar_flutter_plugin_plus.Serialization.serializeHitResult
-import io.carius.lars.ar_flutter_plugin_plus.Serialization.serializePose
+import tech.graaf.franz.ar_flutter_plugin_plus.Serialization.deserializeMatrix4
+import tech.graaf.franz.ar_flutter_plugin_plus.Serialization.serializeAnchor
+import tech.graaf.franz.ar_flutter_plugin_plus.Serialization.serializeHitResult
+import tech.graaf.franz.ar_flutter_plugin_plus.Serialization.serializePose
 import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.loader.FlutterLoader
 import io.flutter.plugin.common.BinaryMessenger

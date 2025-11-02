@@ -1,4 +1,4 @@
-package io.carius.lars.ar_flutter_plugin_plus
+package tech.graaf.franz.ar_flutter_plugin_plus
 
 import androidx.annotation.NonNull
 import io.flutter.embedding.engine.plugins.FlutterPlugin
