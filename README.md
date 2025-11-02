@@ -13,7 +13,7 @@ Many thanks to Oleksandr Leuschenko for the [arkit_flutter_plugin](https://githu
 Add the Flutter package to your project by running:
 
 ```bash
-flutter pub add ar_flutter_plugin
+flutter pub add ar_flutter_plugin_plus
 ```
 
 Or manually add this to your `pubspec.yaml` file (and run `flutter pub get`):
@@ -22,7 +22,7 @@ Or manually add this to your `pubspec.yaml` file (and run `flutter pub get`):
 
 ```yaml
 dependencies:
-  ar_flutter_plugin: ^0.7.3
+  ar_flutter_plugin: ^1.0.0
 ```
 
 ### Importing
@@ -30,7 +30,7 @@ dependencies:
 Add this to your code:
 
 ```dart
-import 'package:ar_flutter_plugin/ar_flutter_plugin.dart';
+import 'package:ar_flutter_plugin/ar_flutter_plugin_plus.dart';
 ```
 
 If you have problems with permissions on iOS (e.g. with the camera view not showing up even though camera access is allowed), add this to the `podfile` of your app's `ios` directory:
@@ -40,9 +40,8 @@ If you have problems with permissions on iOS (e.g. with the camera view not show
     installer.pods_project.targets.each do |target|
       flutter_additional_ios_build_settings(target)
       target.build_configurations.each do |config|
-        # Additional configuration options could already be set here
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
 
-        # BEGINNING OF WHAT YOU SHOULD ADD
         config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= [
           '$(inherited)',
 
@@ -61,10 +60,13 @@ If you have problems with permissions on iOS (e.g. with the camera view not show
           ## dart: PermissionGroup.bluetooth
           'PERMISSION_BLUETOOTH=1',
 
-          # add additional permission groups if required
         ]
-        # END OF WHAT YOU SHOULD ADD
       end
+    end
+
+    # Configure Firebase to use Swift Package Manager
+    installer.pods_project.build_configurations.each do |config|
+      config.build_settings['FIREBASE_FLUTTER_USE_SPM'] = 'YES'
     end
   end
 ```
