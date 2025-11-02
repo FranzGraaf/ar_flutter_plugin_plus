@@ -34,57 +34,59 @@ class _DebugOptionsWidgetState extends State<DebugOptionsWidget> {
         appBar: AppBar(
           title: const Text('Debug Options'),
         ),
-        body: Container(
-            child: Stack(children: [
-          ARView(
-            onARViewCreated: onARViewCreated,
-            planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
-            showPlatformType: true,
-          ),
-          Align(
-            alignment: FractionalOffset.bottomRight,
-            child: Container(
-              width: MediaQuery.of(context).size.width * 0.5,
-              color: Color(0xFFFFFFF).withOpacity(0.5),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  SwitchListTile(
-                    title: const Text('Feature Points'),
-                    value: _showFeaturePoints,
-                    onChanged: (bool value) {
-                      setState(() {
-                        _showFeaturePoints = value;
-                        updateSessionSettings();
-                      });
-                    },
-                  ),
-                  SwitchListTile(
-                    title: const Text('Planes'),
-                    value: _showPlanes,
-                    onChanged: (bool value) {
-                      setState(() {
-                        _showPlanes = value;
-                        updateSessionSettings();
-                      });
-                    },
-                  ),
-                  SwitchListTile(
-                    title: const Text('World Origin'),
-                    value: _showWorldOrigin,
-                    onChanged: (bool value) {
-                      setState(() {
-                        _showWorldOrigin = value;
-                        updateSessionSettings();
-                      });
-                    },
-                  ),
-                ],
+        body: SafeArea(
+          child: Container(
+              child: Stack(children: [
+            ARView(
+              onARViewCreated: onARViewCreated,
+              planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
+              showPlatformType: true,
+            ),
+            Align(
+              alignment: FractionalOffset.bottomRight,
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.5,
+                color: Color(0xFFFFFFF).withOpacity(0.5),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SwitchListTile(
+                      title: const Text('Feature Points'),
+                      value: _showFeaturePoints,
+                      onChanged: (bool value) {
+                        setState(() {
+                          _showFeaturePoints = value;
+                          updateSessionSettings();
+                        });
+                      },
+                    ),
+                    SwitchListTile(
+                      title: const Text('Planes'),
+                      value: _showPlanes,
+                      onChanged: (bool value) {
+                        setState(() {
+                          _showPlanes = value;
+                          updateSessionSettings();
+                        });
+                      },
+                    ),
+                    SwitchListTile(
+                      title: const Text('World Origin'),
+                      value: _showWorldOrigin,
+                      onChanged: (bool value) {
+                        setState(() {
+                          _showWorldOrigin = value;
+                          updateSessionSettings();
+                        });
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ])));
+          ])),
+        ));
   }
 
   void onARViewCreated(

@@ -1,16 +1,15 @@
 import 'dart:io';
-
 import 'package:ar_flutter_plugin_plus/managers/ar_location_manager.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_session_manager.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_object_manager.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_anchor_manager.dart';
+import 'package:ar_flutter_plugin_plus_example/gloabl_variables.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:ar_flutter_plugin_plus/ar_flutter_plugin_plus.dart';
 import 'package:ar_flutter_plugin_plus/datatypes/config_planedetection.dart';
 import 'package:ar_flutter_plugin_plus/datatypes/node_types.dart';
 import 'package:ar_flutter_plugin_plus/models/ar_node.dart';
-import 'package:flutter/services.dart';
 import 'package:vector_math/vector_math_64.dart';
 import 'dart:math';
 import 'package:path_provider/path_provider.dart';
@@ -26,9 +25,7 @@ class LocalAndWebObjectsWidget extends StatefulWidget {
 class _LocalAndWebObjectsWidgetState extends State<LocalAndWebObjectsWidget> {
   ARSessionManager? arSessionManager;
   ARObjectManager? arObjectManager;
-  //String localObjectReference;
   ARNode? localObjectNode;
-  //String webObjectReference;
   ARNode? webObjectNode;
   ARNode? fileSystemNode;
   HttpClient? httpClient;
@@ -111,13 +108,11 @@ class _LocalAndWebObjectsWidgetState extends State<LocalAndWebObjectsWidget> {
 
     //Download model to file system
     httpClient = new HttpClient();
-    _downloadFile(
-        "https://github.com/KhronosGroup/glTF-Sample-Models/raw/master/2.0/Duck/glTF-Binary/Duck.glb",
-        "LocalDuck.glb");
+    _downloadFile(GlobalVariables.arObjectUrl1, "LocalDuck.glb");
     // Alternative to use type fileSystemAppFolderGLTF2:
-    //_downloadAndUnpack(
-    //    "https://drive.google.com/uc?export=download&id=1fng7yiK0DIR0uem7XkV2nlPSGH9PysUs",
-    //    "Chicken_01.zip");
+    /*_downloadAndUnpack(
+        "https://drive.google.com/uc?export=download&id=1fng7yiK0DIR0uem7XkV2nlPSGH9PysUs",
+        "Chicken_01.zip");*/
   }
 
   Future<File> _downloadFile(String url, String filename) async {
@@ -173,8 +168,7 @@ class _LocalAndWebObjectsWidgetState extends State<LocalAndWebObjectsWidget> {
     } else {
       var newNode = ARNode(
           type: NodeType.webGLB,
-          uri:
-              "https://github.com/KhronosGroup/glTF-Sample-Models/raw/master/2.0/Duck/glTF-Binary/Duck.glb",
+          uri: GlobalVariables.arObjectUrl1,
           scale: Vector3(0.2, 0.2, 0.2));
       bool? didAddWebNode = await this.arObjectManager!.addNode(newNode);
       this.webObjectNode = (didAddWebNode!) ? newNode : null;
@@ -191,10 +185,10 @@ class _LocalAndWebObjectsWidgetState extends State<LocalAndWebObjectsWidget> {
           uri: "LocalDuck.glb",
           scale: Vector3(0.2, 0.2, 0.2));
       //Alternative to use type fileSystemAppFolderGLTF2:
-      //var newNode = ARNode(
-      //    type: NodeType.fileSystemAppFolderGLTF2,
-      //    uri: "Chicken_01.gltf",
-      //    scale: Vector3(0.2, 0.2, 0.2));
+      /*var newNode = ARNode(
+          type: NodeType.fileSystemAppFolderGLTF2,
+          uri: "Chicken_01.gltf",
+          scale: Vector3(0.2, 0.2, 0.2));*/
       bool? didAddFileSystemNode = await this.arObjectManager!.addNode(newNode);
       this.fileSystemNode = (didAddFileSystemNode!) ? newNode : null;
     }

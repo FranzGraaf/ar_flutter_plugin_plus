@@ -42,18 +42,15 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
 
     this.arSessionManager!.onInitialize(
       showFeaturePoints: false,
-      showPlanes: true,
+      showPlanes: false,
       customPlaneTexturePath: "Images/triangle.png",
       showWorldOrigin: true,
       handleTaps: true,
       trackingImagePaths: [
         "Images/augmented-images-earth.jpg",
-        "Images/kompass_1.png",
-        "Images/kompass_2.png"
       ],
     );
     this.arObjectManager!.onInitialize();
-    this.arSessionManager!.onPlaneOrPointTap = onPlaneOrPointTapped;
     this.arSessionManager!.onImageDetected = onImageDetected;
   }
 
@@ -77,9 +74,8 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
         anchor = newAnchor;
         // Add note to anchor
         var newNode = ARNode(
-            type: NodeType.localGLB,
-            uri:
-                "Models/realistic_crystal_blues_materials.glb", //"Models/Chicken_01/Chicken_01.gltf",
+            type: NodeType.localGLTF2,
+            uri: "Models/Chicken_01/Chicken_01.gltf",
             scale: Vector3(0.2, 0.2, 0.2),
             position: Vector3(0.0, 0.0, 0.0),
             rotation: Vector4(1.0, 0.0, 0.0, 0.0));
@@ -129,17 +125,11 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
 
         anchor = imageAnchor;
 
-        // chose model url
-        var modelUrl = "Models/realistic_crystal_blues_materials.glb";
-        if (imageName == "kompass_1") {
-          modelUrl = "Models/realistic_crystal.glb";
-        } else if (imageName == "kompass_2") {
-          modelUrl = "Models/sitarbuckss.glb";
-        }
+        var modelUrl = "Models/Chicken_01/Chicken_01.gltf";
 
         // Create a 3D object to place on the image
         var imageNode = ARNode(
-            type: NodeType.localGLB,
+            type: NodeType.localGLTF2,
             uri: modelUrl,
             scale: Vector3(0.1, 0.1, 0.1), // Smaller scale for image anchors
             position: Vector3(0.0, 0.0, 0.0),

@@ -3,6 +3,7 @@ import 'package:ar_flutter_plugin_plus/managers/ar_session_manager.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_object_manager.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_anchor_manager.dart';
 import 'package:ar_flutter_plugin_plus/models/ar_anchor.dart';
+import 'package:ar_flutter_plugin_plus_example/gloabl_variables.dart';
 import 'package:flutter/material.dart';
 import 'package:ar_flutter_plugin_plus/ar_flutter_plugin_plus.dart';
 import 'package:ar_flutter_plugin_plus/datatypes/config_planedetection.dart';
@@ -35,29 +36,36 @@ class _ScreenshotWidgetState extends State<ScreenshotWidget> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
-          title: const Text('Screenshots'),
-        ),
-        body: Container(
-            child: Stack(children: [
-          ARView(
-            onARViewCreated: onARViewCreated,
-            planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
+      appBar: AppBar(
+        title: const Text('Screenshots'),
+      ),
+      body: SafeArea(
+        child: Container(
+          child: Stack(
+            children: [
+              ARView(
+                onARViewCreated: onARViewCreated,
+                planeDetectionConfig:
+                    PlaneDetectionConfig.horizontalAndVertical,
+              ),
+              Align(
+                alignment: FractionalOffset.bottomCenter,
+                child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      ElevatedButton(
+                          onPressed: onRemoveEverything,
+                          child: const Text("Remove Everything")),
+                      ElevatedButton(
+                          onPressed: onTakeScreenshot,
+                          child: const Text("Take Screenshot")),
+                    ]),
+              )
+            ],
           ),
-          Align(
-            alignment: FractionalOffset.bottomCenter,
-            child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton(
-                      onPressed: onRemoveEverything,
-                      child: const Text("Remove Everything")),
-                  ElevatedButton(
-                      onPressed: onTakeScreenshot,
-                      child: const Text("Take Screenshot")),
-                ]),
-          )
-        ])));
+        ),
+      ),
+    );
   }
 
   void onARViewCreated(
@@ -82,10 +90,6 @@ class _ScreenshotWidgetState extends State<ScreenshotWidget> {
   }
 
   Future<void> onRemoveEverything() async {
-    /*nodes.forEach((node) {
-      this.arObjectManager.removeNode(node);
-    });*/
-    // anchors.forEach((anchor)
     for (var anchor in anchors) {
       arAnchorManager!.removeAnchor(anchor);
     }
@@ -114,7 +118,7 @@ class _ScreenshotWidgetState extends State<ScreenshotWidget> {
       List<ARHitTestResult> hitTestResults) async {
     var singleHitTestResult = hitTestResults.firstWhere(
         (hitTestResult) => hitTestResult.type == ARHitTestResultType.plane);
-    if (singleHitTestResult != null) {
+    {
       var newAnchor =
           ARPlaneAnchor(transformation: singleHitTestResult.worldTransform);
       bool? didAddAnchor = await arAnchorManager!.addAnchor(newAnchor);
@@ -123,8 +127,7 @@ class _ScreenshotWidgetState extends State<ScreenshotWidget> {
         // Add note to anchor
         var newNode = ARNode(
             type: NodeType.webGLB,
-            uri:
-                "https://github.com/KhronosGroup/glTF-Sample-Models/raw/master/2.0/Duck/glTF-Binary/Duck.glb",
+            uri: GlobalVariables.arObjectUrl1,
             scale: Vector3(0.2, 0.2, 0.2),
             position: Vector3(0.0, 0.0, 0.0),
             rotation: Vector4(1.0, 0.0, 0.0, 0.0));

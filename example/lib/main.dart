@@ -1,18 +1,15 @@
 import 'package:ar_flutter_plugin_plus_example/examples/externalmodelmanagementexample.dart';
 import 'package:ar_flutter_plugin_plus_example/examples/image_marker_tracking.dart';
+import 'package:ar_flutter_plugin_plus_example/examples/objectgesturesexample.dart';
 import 'package:ar_flutter_plugin_plus_example/examples/objectsonplanesexample.dart';
+import 'package:ar_flutter_plugin_plus_example/examples/screenshotexample.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
-
 import 'package:flutter/services.dart';
 import 'package:ar_flutter_plugin_plus/ar_flutter_plugin_plus.dart';
-
 import 'package:ar_flutter_plugin_plus_example/examples/cloudanchorexample.dart';
 import 'package:ar_flutter_plugin_plus_example/examples/localandwebobjectsexample.dart';
 import 'package:ar_flutter_plugin_plus_example/examples/debugoptionsexample.dart';
-
-import 'examples/objectgesturesexample.dart';
-import 'examples/screenshotexample.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,7 +61,9 @@ class _MyAppState extends State<MyApp> {
         body: Column(children: [
           Text('Running on: $_platformVersion\n'),
           Expanded(
-            child: ExampleList(),
+            child: SafeArea(
+              child: ExampleList(),
+            ),
           ),
         ]),
       ),
@@ -107,7 +106,7 @@ class ExampleList extends StatelessWidget {
           'Place 3D objects on planes and take screenshots',
           () => Navigator.push(context,
               MaterialPageRoute(builder: (context) => ScreenshotWidget()))),
-      /*Example(
+      Example(
           'Cloud Anchors',
           'Place and retrieve 3D objects using the Google Cloud Anchor API',
           () => Navigator.push(context,
@@ -118,7 +117,7 @@ class ExampleList extends StatelessWidget {
           () => Navigator.push(
               context,
               MaterialPageRoute(
-                  builder: (context) => ExternalModelManagementWidget())))*/
+                  builder: (context) => ExternalModelManagementWidget()))),
       Example(
           'Image Marker Tracking',
           'Place 3D objects on image markers',
