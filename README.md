@@ -1,6 +1,9 @@
-# ar_flutter_plugin
+# ar_flutter_plugin_plus
 
-[![pub package](https://img.shields.io/pub/v/ar_flutter_plugin.svg)](https://pub.dev/packages/ar_flutter_plugin)
+[![pub package](https://img.shields.io/pub/v/ar_flutter_plugin_plua.svg)](https://pub.dev/packages/ar_flutter_plugin_plua)
+
+First of all great thanks to Lars Carius who developed the original ar_flutter_plugin (https://pub.dev/packages/ar_flutter_plugin)
+This plugin is based on his great plugin with extended functionalities.
 
 Flutter Plugin for (collaborative) Augmented Reality - Supports ARKit for iOS and ARCore for Android devices.
 
@@ -18,11 +21,11 @@ flutter pub add ar_flutter_plugin_plus
 
 Or manually add this to your `pubspec.yaml` file (and run `flutter pub get`):
 
-# ar_flutter_plugin package extension
+# ar_flutter_plugin_plus package extension
 
 ```yaml
 dependencies:
-  ar_flutter_plugin: ^1.0.0
+  ar_flutter_plugin_plus: ^1.0.0
 ```
 
 ### Importing
@@ -30,7 +33,7 @@ dependencies:
 Add this to your code:
 
 ```dart
-import 'package:ar_flutter_plugin/ar_flutter_plugin_plus.dart';
+import 'package:ar_flutter_plugin_plus/ar_flutter_plugin_plus.dart';
 ```
 
 If you have problems with permissions on iOS (e.g. with the camera view not showing up even though camera access is allowed), add this to the `podfile` of your app's `ios` directory:
