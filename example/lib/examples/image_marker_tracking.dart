@@ -1,14 +1,10 @@
-import 'dart:developer';
-
 import 'package:ar_flutter_plugin_plus/datatypes/config_planedetection.dart';
-import 'package:ar_flutter_plugin_plus/datatypes/hittest_result_types.dart';
 import 'package:ar_flutter_plugin_plus/datatypes/node_types.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_anchor_manager.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_location_manager.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_object_manager.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_session_manager.dart';
 import 'package:ar_flutter_plugin_plus/models/ar_anchor.dart';
-import 'package:ar_flutter_plugin_plus/models/ar_hittest_result.dart';
 import 'package:ar_flutter_plugin_plus/models/ar_node.dart';
 import 'package:ar_flutter_plugin_plus/widgets/ar_view.dart';
 import 'package:flutter/material.dart';
@@ -44,56 +40,14 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
       showFeaturePoints: false,
       showPlanes: false,
       customPlaneTexturePath: "Images/triangle.png",
-      showWorldOrigin: true,
-      handleTaps: true,
+      showWorldOrigin: false,
+      handleTaps: false,
       trackingImagePaths: [
         "Images/augmented-images-earth.jpg",
       ],
     );
     this.arObjectManager!.onInitialize();
     this.arSessionManager!.onImageDetected = onImageDetected;
-  }
-
-  Future<void> onPlaneOrPointTapped(
-      List<ARHitTestResult> hitTestResults) async {
-    try {
-      ARHitTestResult singleHitTestResult = hitTestResults.firstWhere(
-          (hitTestResult) => hitTestResult.type == ARHitTestResultType.plane);
-      var newAnchor =
-          ARPlaneAnchor(transformation: singleHitTestResult.worldTransform);
-      bool? didAddAnchor = await arAnchorManager!.addAnchor(newAnchor);
-      if (didAddAnchor == true) {
-        // remove old anchor and node
-        if (anchor != null) {
-          arAnchorManager!.removeAnchor(anchor!);
-        }
-        if (node != null) {
-          arObjectManager!.removeNode(node!);
-        }
-        // set current anchor
-        anchor = newAnchor;
-        // Add note to anchor
-        var newNode = ARNode(
-            type: NodeType.localGLTF2,
-            uri: "Models/Chicken_01/Chicken_01.gltf",
-            scale: Vector3(0.2, 0.2, 0.2),
-            position: Vector3(0.0, 0.0, 0.0),
-            rotation: Vector4(1.0, 0.0, 0.0, 0.0));
-        bool? didAddNodeToAnchor =
-            await arObjectManager!.addNode(newNode, planeAnchor: newAnchor);
-
-        if (didAddNodeToAnchor == true) {
-          node = newNode;
-        } else {
-          arSessionManager!.onError("Adding Node to Anchor failed");
-        }
-      } else {
-        arSessionManager!.onError("Adding Anchor failed");
-      }
-    } catch (e) {
-      // nothing just no plane found
-      log(e.toString());
-    }
   }
 
   void onImageDetected(String imageName, Matrix4 transformation) {
@@ -128,12 +82,31 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
         var modelUrl = "Models/Chicken_01/Chicken_01.gltf";
 
         // Create a 3D object to place on the image
+        double scale = 0.05;
         var imageNode = ARNode(
-            type: NodeType.localGLTF2,
-            uri: modelUrl,
-            scale: Vector3(0.1, 0.1, 0.1), // Smaller scale for image anchors
-            position: Vector3(0.0, 0.0, 0.0),
-            rotation: Vector4(1.0, 0.0, 0.0, 0.0));
+          type: NodeType.localGLTF2,
+          uri: modelUrl,
+          transformation: Matrix4(
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+            scale,
+          ),
+          position: Vector3(0.0, 0.0, 0.0),
+          rotation: Vector4(1.0, 0.0, 0.0, 0.0),
+        );
 
         bool? didAddNodeToAnchor =
             await arObjectManager!.addNode(imageNode, planeAnchor: imageAnchor);
@@ -142,10 +115,10 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
           node = imageNode;
           print("Successfully placed object on image: $imageName");
         } else {
-          arSessionManager!.onError("Adding Node to Image Anchor failed");
+          //arSessionManager!.onError("Adding Node to Image Anchor failed");
         }
       } else {
-        arSessionManager!.onError("Adding Image Anchor failed");
+        //arSessionManager!.onError("Adding Image Anchor failed");
       }
     } catch (e) {
       print("Error placing object on image: $e");
