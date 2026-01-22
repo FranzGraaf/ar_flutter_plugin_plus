@@ -1476,6 +1476,14 @@ internal class AndroidARView(
                 camera.getViewMatrix(viewMatrix, 0)
                 camera.getProjectionMatrix(projectionMatrix, 0, 0.1f, 100.0f)
 
+                if (showPlanes) {
+                    val planes = session?.getAllTrackables(Plane::class.java) ?: emptyList()
+                    planeRenderer.draw(planes, viewMatrix, projectionMatrix)
+                }
+
+                if (showFeaturePoints) {
+                    val pointCloud = frame.acquirePointCloud()
+                    pointCloudRenderer.draw(pointCloud, viewMatrix, projectionMatrix)
                     pointCloud.release()
                 }
 
