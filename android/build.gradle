@@ -3,6 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+repositories {
+    google()
+    mavenCentral()
+}
+
 group = "tech.graaf.franz.ar_flutter_plugin_plus"
 version = "1.0-SNAPSHOT"
 
@@ -43,9 +48,9 @@ dependencies {
     implementation("com.google.ar:core:1.52.0")
 
     // Filament (GLB/GLTF rendering)
-    implementation(files("libs/filament-v1.68.4-android.aar"))
-    implementation(files("libs/filament-utils-v1.68.4-android.aar"))
-    implementation(files("libs/gltfio-v1.68.4-android.aar"))
+    implementation("com.google.android.filament:filament-android:1.68.4")
+    implementation("com.google.android.filament:filament-utils-android:1.68.4")
+    implementation("com.google.android.filament:gltfio-android:1.68.4")
 
     // AndroidX + Play Services
     implementation("androidx.appcompat:appcompat:1.7.0")
