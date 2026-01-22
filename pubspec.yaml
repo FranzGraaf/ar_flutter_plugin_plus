@@ -1,6 +1,6 @@
 name: ar_flutter_plugin_plus
 description: Flutter Plugin for Augmented Reality experiences - Supports ARKit for iOS and ARCore for Android devices.
-version: 1.1.0
+version: 1.1.1
 homepage: https://xinix.tech/
 repository: https://github.com/FranzGraaf/ar_flutter_plugin_plus
 

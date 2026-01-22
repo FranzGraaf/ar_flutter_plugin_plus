@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.1
+
+- bug fix
+
 ## 1.1.0
 
 - Removed depricated Sceneform dependency on Android
