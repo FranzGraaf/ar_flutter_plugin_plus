@@ -8,7 +8,7 @@ import 'package:ar_flutter_plugin_plus/models/ar_anchor.dart';
 import 'package:ar_flutter_plugin_plus/models/ar_node.dart';
 import 'package:ar_flutter_plugin_plus/widgets/ar_view.dart';
 import 'package:flutter/material.dart';
-import 'package:vector_math/vector_math_64.dart';
+import 'package:vector_math/vector_math_64.dart' as vm;
 
 class ImageMarkerTracking extends StatefulWidget {
   const ImageMarkerTracking({Key? key}) : super(key: key);
@@ -26,16 +26,41 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
   ARAnchor? anchor;
   ARNode? node;
 
-  void onARViewCreated(
+  String? lastScannedImageName;
+  bool isInitializing = true;
+
+  Future<void> onARViewCreated(
       ARSessionManager arSessionManager,
       ARObjectManager arObjectManager,
       ARAnchorManager arAnchorManager,
-      ARLocationManager arLocationManager) {
+      ARLocationManager arLocationManager) async {
     this.arSessionManager = arSessionManager;
     this.arObjectManager = arObjectManager;
     this.arAnchorManager = arAnchorManager;
     this.arLocationManager = arLocationManager;
 
+    setState(() {
+      isInitializing = true;
+    });
+    this.arSessionManager!.onImageTrackingConfigured = (success) {
+      if (mounted) {
+        setState(() {
+          isInitializing = false;
+        });
+      }
+    };
+    /*await this.arSessionManager!.onInitialize(
+          showFeaturePoints: false,
+          showPlanes: false,
+          customPlaneTexturePath: "Images/triangle.png",
+          showWorldOrigin: false,
+          handleTaps: false,
+          trackingImagePaths: [
+            
+          ],
+          continuousImageTracking: false,
+          imageTrackingUpdateIntervalMs: 100,
+        );*/
     this.arSessionManager!.onInitialize(
           showFeaturePoints: false,
           showPlanes: false,
@@ -43,16 +68,20 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
           showWorldOrigin: false,
           handleTaps: false,
           trackingImagePaths: [
-            "Images/augmented-images-earth.jpg",
+            "Images/augmented-images-earth.jpg", // this image is already precached with the setup in main.dart
           ],
           continuousImageTracking: false,
-          imageTrackingUpdateIntervalMs: 100,
+          imageTrackingUpdateIntervalMs: 1000,
+          lightIntensityMultiplier: 2000,
         );
     this.arObjectManager!.onInitialize();
     this.arSessionManager!.onImageDetected = onImageDetected;
   }
 
   void onImageDetected(String imageName, Matrix4 transformation) {
+    setState(() {
+      lastScannedImageName = imageName;
+    });
     placeObjectOnImage(imageName, transformation);
   }
 
@@ -63,12 +92,12 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
 
       double scale = 0.005;
       final modelTransform = Matrix4.fromFloat64List(transformation.storage);
-      modelTransform.translate(0.0, 0.0, 0.02);
-      modelTransform.scale(scale, scale, scale);
+      modelTransform.translateByVector3(vm.Vector3(0, 0, 0.0));
+      modelTransform.scaleByVector3(vm.Vector3(scale, scale, scale));
 
       if (node == null) {
         var imageNode = ARNode(
-          type: NodeType.localGLTF2,
+          type: NodeType.localGLB,
           uri: modelUrl,
           transformation: modelTransform,
         );
@@ -107,9 +136,41 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
       appBar: AppBar(
         title: const Text('Image Marker Tracking'),
       ),
-      body: ARView(
-        onARViewCreated: onARViewCreated,
-        planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
+      body: Stack(
+        children: [
+          ARView(
+            onARViewCreated: onARViewCreated,
+            planeDetectionConfig: PlaneDetectionConfig.horizontalAndVertical,
+          ),
+          if (isInitializing)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black54,
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+            ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(
+              child: Container(
+                padding: const EdgeInsets.all(8.0),
+                margin: const EdgeInsets.all(8.0),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+                child: Text(
+                  lastScannedImageName != null
+                      ? 'Last Scanned Image: $lastScannedImageName'
+                      : 'No Image Scanned Yet',
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

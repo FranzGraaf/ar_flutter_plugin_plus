@@ -7,6 +7,8 @@ import Combine
 // Responsible for creating Renderables and Nodes
 class ArModelBuilder: NSObject {
 
+    var iosModelScaleFactor: Float = 0.4
+
     func makePlane(anchor: ARPlaneAnchor, flutterAssetFile: String?) -> SCNNode {
         let plane = SCNPlane(width: CGFloat(anchor.extent.x), height: CGFloat(anchor.extent.z))
         //Create material
@@ -61,16 +63,21 @@ class ArModelBuilder: NSObject {
     func makeNodeFromGltf(name: String, modelPath: String, transformation: Array<NSNumber>?) -> SCNNode? {
         
         var scene: SCNScene
-        let node: SCNNode = SCNNode()
+            let node: SCNNode = SCNNode()
 
         do {
-            print("iOS ModelBuilder: Loading GLTF from path: \(modelPath)")
-            let sceneSource = try GLTFSceneSource(named: modelPath)
-            scene = try sceneSource.scene()
+            let resolvedPath = resolveFlutterAssetPath(modelPath)
+            if let resolvedPath = resolvedPath {
+                let sceneSource = try GLTFSceneSource(path: resolvedPath)
+                scene = try sceneSource.scene()
+            } else {
+                let sceneSource = try GLTFSceneSource(named: modelPath)
+                scene = try sceneSource.scene()
+            }
 
             print("iOS ModelBuilder: Scene loaded, processing \(scene.rootNode.childNodes.count) child nodes")
             for child in scene.rootNode.childNodes {
-                child.scale = SCNVector3(0.01,0.01,0.01) // Compensate for the different model dimension definitions in iOS and Android (meters vs. millimeters)
+                child.scale = SCNVector3(iosModelScaleFactor, iosModelScaleFactor, iosModelScaleFactor) // Compensate for the different model dimension definitions in iOS and Android (meters vs. millimeters)
                 //child.eulerAngles.z = -.pi // Compensate for the different model coordinate definitions in iOS and Android
                 //child.eulerAngles.y = -.pi // Compensate for the different model coordinate definitions in iOS and Android
                 node.addChildNode(child.flattenedClone())
@@ -101,15 +108,24 @@ class ArModelBuilder: NSObject {
         let node: SCNNode = SCNNode()
 
         do {
-            let sceneSource = try GLTFSceneSource(named: modelPath)
-            scene = try sceneSource.scene()
+            let resolvedPath = resolveFlutterAssetPath(modelPath)
+            if let resolvedPath = resolvedPath {
+                let sceneSource = try GLTFSceneSource(path: resolvedPath)
+                scene = try sceneSource.scene()
+            } else {
+                let sceneSource = try GLTFSceneSource(named: modelPath)
+                scene = try sceneSource.scene()
+            }
+
+            print("iOS ModelBuilder: GLB scene loaded with \(scene.rootNode.childNodes.count) root children")
 
             for child in scene.rootNode.childNodes {
-                child.scale = SCNVector3(0.01,0.01,0.01) // Compensate for the different model dimension definitions in iOS and Android (meters vs. millimeters)
+                child.scale = SCNVector3(iosModelScaleFactor, iosModelScaleFactor, iosModelScaleFactor) // Compensate for the different model dimension definitions in iOS and Android (meters vs. millimeters)
                 //child.eulerAngles.z = -.pi // Compensate for the different model coordinate definitions in iOS and Android
                 //child.eulerAngles.y = -.pi // Compensate for the different model coordinate definitions in iOS and Android
                 node.addChildNode(child.flattenedClone())
             }
+
 
             node.name = name
             if let transform = transformation {
@@ -123,6 +139,23 @@ class ArModelBuilder: NSObject {
         }
     }
 
+    private func resolveFlutterAssetPath(_ assetKey: String) -> String? {
+        if let directPath = Bundle.main.path(forResource: assetKey, ofType: nil) {
+            return directPath
+        }
+        if let assetsPath = Bundle.main.path(forResource: assetKey, ofType: nil, inDirectory: "flutter_assets") {
+            return assetsPath
+        }
+        if assetKey.hasPrefix("flutter_assets/") {
+            if let prefixedPath = Bundle.main.path(forResource: assetKey, ofType: nil) {
+                return prefixedPath
+            }
+        } else if let prefixedPath = Bundle.main.path(forResource: "flutter_assets/\(assetKey)", ofType: nil) {
+            return prefixedPath
+        }
+        return nil
+    }
+
     // Creates a node from a given gltf2 (.gltf) model in the Flutter assets folder
     func makeNodeFromFileSystemGltf(name: String, modelPath: String, transformation: Array<NSNumber>?) -> SCNNode? {
         
@@ -134,7 +167,7 @@ class ArModelBuilder: NSObject {
             scene = try sceneSource.scene()
 
             for child in scene.rootNode.childNodes {
-                child.scale = SCNVector3(0.01,0.01,0.01) // Compensate for the different model dimension definitions in iOS and Android (meters vs. millimeters)
+                child.scale = SCNVector3(iosModelScaleFactor, iosModelScaleFactor, iosModelScaleFactor) // Compensate for the different model dimension definitions in iOS and Android (meters vs. millimeters)
                 //child.eulerAngles.z = -.pi // Compensate for the different model coordinate definitions in iOS and Android
                 //child.eulerAngles.y = -.pi // Compensate for the different model coordinate definitions in iOS and Android
                 node.addChildNode(child.flattenedClone())
@@ -163,7 +196,7 @@ class ArModelBuilder: NSObject {
             scene = try sceneSource.scene()
 
             for child in scene.rootNode.childNodes {
-                child.scale = SCNVector3(0.01,0.01,0.01) // Compensate for the different model dimension definitions in iOS and Android (meters vs. millimeters)
+                child.scale = SCNVector3(iosModelScaleFactor, iosModelScaleFactor, iosModelScaleFactor) // Compensate for the different model dimension definitions in iOS and Android (meters vs. millimeters)
                 //child.eulerAngles.z = -.pi // Compensate for the different model coordinate definitions in iOS and Android
                 //child.eulerAngles.y = -.pi // Compensate for the different model coordinate definitions in iOS and Android
                 node.addChildNode(child.flattenedClone())
@@ -208,7 +241,7 @@ class ArModelBuilder: NSObject {
                             let scene = try sceneSource.scene()
 
                             for child in scene.rootNode.childNodes {
-                                child.scale = SCNVector3(0.01,0.01,0.01) // Compensate for the different model dimension definitions in iOS and Android (meters vs. millimeters)
+                                child.scale = SCNVector3(self.iosModelScaleFactor, self.iosModelScaleFactor, self.iosModelScaleFactor) // Compensate for the different model dimension definitions in iOS and Android (meters vs. millimeters)
                                 //child.eulerAngles.z = -.pi // Compensate for the different model coordinate definitions in iOS and Android
                                 //child.eulerAngles.y = -.pi // Compensate for the different model coordinate definitions in iOS and Android
                                 node?.addChildNode(child)

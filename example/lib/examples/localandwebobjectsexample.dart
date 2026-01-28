@@ -155,7 +155,7 @@ class _LocalAndWebObjectsWidgetState extends State<LocalAndWebObjectsWidget> {
       var newNode = ARNode(
           type: NodeType.localGLTF2,
           uri: "Models/Chicken_01/Chicken_01.gltf",
-          scale: Vector3(0.2, 0.2, 0.2),
+          scale: Vector3(0.02, 0.02, 0.02),
           position: Vector3(0.0, 0.0, 0.0),
           rotation: Vector4(1.0, 0.0, 0.0, 0.0));
       bool? didAddLocalNode = await this.arObjectManager!.addNode(newNode);

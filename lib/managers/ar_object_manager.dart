@@ -112,8 +112,14 @@ class ARObjectManager {
   }
 
   /// Sets up the AR Object Manager
-  onInitialize() {
-    _channel.invokeMethod<void>('init', {});
+  /// [iosScaleFactor] and [androidScaleFactor] control native model scaling.
+  /// Defaults match current native behavior.
+  onInitialize(
+      {double iosScaleFactor = 0.4, double androidScaleFactor = 0.33}) {
+    _channel.invokeMethod<void>('init', {
+      'iosScaleFactor': iosScaleFactor,
+      'androidScaleFactor': androidScaleFactor,
+    });
   }
 
   /// Add given node to the given anchor of the underlying AR scene (or to its top-level if no anchor is given) and listen to any changes made to its transformation

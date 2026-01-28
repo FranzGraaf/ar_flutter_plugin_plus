@@ -7,6 +7,12 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:ar_flutter_plugin_plus/ar_flutter_plugin_plus.dart';
+import 'package:ar_flutter_plugin_plus/datatypes/config_planedetection.dart';
+import 'package:ar_flutter_plugin_plus/managers/ar_anchor_manager.dart';
+import 'package:ar_flutter_plugin_plus/managers/ar_location_manager.dart';
+import 'package:ar_flutter_plugin_plus/managers/ar_object_manager.dart';
+import 'package:ar_flutter_plugin_plus/managers/ar_session_manager.dart';
+import 'package:ar_flutter_plugin_plus/widgets/ar_view.dart';
 import 'package:ar_flutter_plugin_plus_example/examples/cloudanchorexample.dart';
 import 'package:ar_flutter_plugin_plus_example/examples/localandwebobjectsexample.dart';
 import 'package:ar_flutter_plugin_plus_example/examples/debugoptionsexample.dart';
@@ -24,6 +30,12 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   String _platformVersion = 'Unknown';
   static const String _title = 'AR Plugin Demo';
+  static const List<String> _precompileTrackingImages = [
+    "Images/augmented-images-earth.jpg",
+  ];
+  bool _precompileInProgress = false;
+  bool _precompileDone = false;
+  bool _precompileViewVisible = true;
 
   @override
   void initState() {
@@ -58,16 +70,69 @@ class _MyAppState extends State<MyApp> {
         appBar: AppBar(
           title: const Text(_title),
         ),
-        body: Column(children: [
-          Text('Running on: $_platformVersion\n'),
-          Expanded(
-            child: SafeArea(
-              child: ExampleList(),
-            ),
-          ),
-        ]),
+        body: Stack(
+          children: [
+            Column(children: [
+              Text('Running on: $_platformVersion\n'),
+              Expanded(
+                child: SafeArea(
+                  child: ExampleList(),
+                ),
+              ),
+            ]),
+            if (_precompileViewVisible)
+              IgnorePointer(
+                child: Opacity(
+                  opacity: 0.0,
+                  child: SizedBox(
+                    width: 1,
+                    height: 1,
+                    child: ARView(
+                      onARViewCreated: _onPrecompileARViewCreated,
+                      planeDetectionConfig: PlaneDetectionConfig.none,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
+  }
+
+  Future<void> _onPrecompileARViewCreated(
+      ARSessionManager arSessionManager,
+      ARObjectManager arObjectManager,
+      ARAnchorManager arAnchorManager,
+      ARLocationManager arLocationManager) async {
+    if (_precompileInProgress || _precompileDone) {
+      return;
+    }
+    _precompileInProgress = true;
+    bool success = false;
+    try {
+      await arSessionManager.onInitialize(
+        showFeaturePoints: false,
+        showPlanes: false,
+        showWorldOrigin: false,
+        handleTaps: false,
+        trackingImagePaths: null,
+      );
+
+      success = await arSessionManager
+          .precompileImageTrackingDatabase(_precompileTrackingImages);
+    } catch (_) {
+      success = false;
+    } finally {
+      await arSessionManager.dispose();
+      if (mounted) {
+        setState(() {
+          _precompileDone = true;
+          _precompileInProgress = false;
+          _precompileViewVisible = false;
+        });
+      }
+    }
   }
 }
 

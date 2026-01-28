@@ -40,6 +40,8 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
     private var rotationVelocity: CGFloat?
     private var panningNode: SCNNode?
     private var panningNodeCurrentWorldLocation: SCNVector3?
+    private var lightIntensityMultiplier: CGFloat = 1.0
+    private static var cachedReferenceImages: [String: Set<ARReferenceImage>] = [:]
 
     init(
         frame: CGRect,
@@ -70,6 +72,13 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
         self.anchorManagerChannel.setMethodCallHandler(self.onAnchorMethodCalled)
     }
 
+    private func applyLightIntensityMultiplier(_ multiplier: NSNumber?) {
+        let value = CGFloat(truncating: multiplier ?? 1.0)
+        let clamped = max(0.01, value)
+        lightIntensityMultiplier = clamped
+        sceneView.scene.lightingEnvironment.intensity = lightIntensityMultiplier
+    }
+
     func view() -> UIView {
         return self.sceneView
     }
@@ -82,7 +91,7 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
                 result(nil)
             }
 
-    func onSessionMethodCalled(_ call :FlutterMethodCall, _ result:FlutterResult) {
+    func onSessionMethodCalled(_ call :FlutterMethodCall, _ result: @escaping FlutterResult) {
         let arguments = call.arguments as? Dictionary<String, Any>
 
         switch call.method {
@@ -114,6 +123,10 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
                 } else {
                     result(nil)
                 }
+            case "setLightIntensityMultiplier":
+                applyLightIntensityMultiplier(arguments?["multiplier"] as? NSNumber)
+                result(nil)
+                break
             case "dispose":
                 onDispose(result)
                 result(nil)
@@ -126,6 +139,12 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
                 )
                 result(nil)
                 break
+            case "precompileImageTrackingDatabase":
+                let imagePaths = arguments?["trackingImagePaths"] as? [String] ?? []
+                precompileImageTrackingDatabase(imagePaths: imagePaths) { success in
+                    result(success)
+                }
+                break
             default:
                 result(FlutterMethodNotImplemented)
                 break
@@ -137,7 +156,9 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
           
         switch call.method {
             case "init":
-                self.objectManagerChannel.invokeMethod("onError", arguments: ["ObjectTEST from iOS"])
+                if let iosScaleFactor = arguments?["iosScaleFactor"] as? NSNumber {
+                    self.modelBuilder.iosModelScaleFactor = iosScaleFactor.floatValue
+                }
                 result(nil)
                 break
             case "addNode":
@@ -357,8 +378,11 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
             trackingImagePaths: arguments["trackingImagePaths"] as? [String],
             continuous: arguments["continuousImageTracking"] as? Bool,
             intervalMs: arguments["imageTrackingUpdateIntervalMs"] as? NSNumber,
-            runSession: false
+            runSession: true
         )
+
+        // Apply lighting multiplier if provided
+        applyLightIntensityMultiplier(arguments["lightIntensityMultiplier"] as? NSNumber)
     
         // Update session configuration
         self.sceneView.session.run(configuration)
@@ -426,7 +450,6 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
     }
 
     func addNode(dict_node: Dictionary<String, Any>, dict_anchor: Dictionary<String, Any>? = nil) -> Future<Bool, Never> {
-
         return Future {promise in
             
             switch (dict_node["type"] as! Int) {
@@ -443,7 +466,6 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
                                     if let anchor = self.anchorCollection[anchorName]{
                                         // Attach node to the top-level node of the specified anchor
                                         self.sceneView.node(for: anchor)?.addChildNode(node)
-                                        print("iOS: Node attached to plane anchor")
                                         promise(.success(true))
                                     } else {
                                         print("iOS: Failed to find anchor: \(anchorName)")
@@ -457,7 +479,6 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
                         } else {
                             // Attach to top-level node of the scene
                             self.sceneView.scene.rootNode.addChildNode(node)
-                            print("iOS: Node attached to scene root")
                             promise(.success(true))
                         }
                     } else {
@@ -900,37 +921,104 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
             imageTrackingUpdateInterval = intervalMs.doubleValue / 1000.0
         }
         if let trackingImagePaths = trackingImagePaths {
-            setupImageTracking(imagePaths: trackingImagePaths)
-            if runSession {
-                self.sceneView.session.run(configuration)
-            }
+            setupImageTrackingAsync(imagePaths: trackingImagePaths, runSession: runSession)
         }
     }
     
-    func setupImageTracking(imagePaths: [String]) {
-        var referenceImages = Set<ARReferenceImage>()
-        
-        for imagePath in imagePaths {
-            if let image = loadImageFromAssets(imagePath: imagePath) {
-                let imageName = URL(fileURLWithPath: imagePath).deletingPathExtension().lastPathComponent
-                
-                // Create ARReferenceImage with a default physical width (you may want to make this configurable)
-                let physicalWidth: Float = 0.2 // 20cm default width - adjust based on your actual printed image size
-                let referenceImage = ARReferenceImage(image.cgImage!, orientation: .up, physicalWidth: CGFloat(physicalWidth))
-                referenceImage.name = imageName
-                
-                referenceImages.insert(referenceImage)
-            } else {
-                print("Failed to load image: \(imagePath)")
+    private func imageCacheKey(_ imagePaths: [String]) -> String {
+        return imagePaths.joined(separator: "|")
+    }
+    
+    func setupImageTrackingAsync(imagePaths: [String], runSession: Bool) {
+        let cacheKey = imageCacheKey(imagePaths)
+        if let cachedImages = IosARView.cachedReferenceImages[cacheKey] {
+            DispatchQueue.main.async {
+                self.configuration.detectionImages = cachedImages
+                if runSession {
+                    self.sceneView.session.run(self.configuration)
+                }
+                self.sessionManagerChannel.invokeMethod(
+                    "onImageTrackingConfigured",
+                    arguments: ["success": true, "cached": true]
+                )
+            }
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            var referenceImages = Set<ARReferenceImage>()
+            var success = true
+            
+            for imagePath in imagePaths {
+                if let image = self.loadImageFromAssets(imagePath: imagePath) {
+                    let imageName = URL(fileURLWithPath: imagePath).deletingPathExtension().lastPathComponent
+                    
+                    // Create ARReferenceImage with a default physical width (you may want to make this configurable)
+                    let physicalWidth: Float = 0.2 // 20cm default width - adjust based on your actual printed image size
+                    let referenceImage = ARReferenceImage(image.cgImage!, orientation: .up, physicalWidth: CGFloat(physicalWidth))
+                    referenceImage.name = imageName
+                    
+                    referenceImages.insert(referenceImage)
+                } else {
+                    print("Failed to load image: \(imagePath)")
+                    success = false
+                }
+            }
+            
+            DispatchQueue.main.async {
+                IosARView.cachedReferenceImages[cacheKey] = referenceImages
+                self.configuration.detectionImages = referenceImages
+                if runSession {
+                    self.sceneView.session.run(self.configuration)
+                }
+                self.sessionManagerChannel.invokeMethod(
+                    "onImageTrackingConfigured",
+                    arguments: ["success": success]
+                )
             }
         }
-        
-        configuration.detectionImages = referenceImages
+    }
+
+    func precompileImageTrackingDatabase(imagePaths: [String], completion: @escaping (Bool) -> Void) {
+        let cacheKey = imageCacheKey(imagePaths)
+        if IosARView.cachedReferenceImages[cacheKey] != nil {
+            completion(true)
+            return
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            var referenceImages = Set<ARReferenceImage>()
+            var success = true
+
+            for imagePath in imagePaths {
+                if let image = self.loadImageFromAssets(imagePath: imagePath) {
+                    let imageName = URL(fileURLWithPath: imagePath).deletingPathExtension().lastPathComponent
+                    let physicalWidth: Float = 0.2
+                    let referenceImage = ARReferenceImage(image.cgImage!, orientation: .up, physicalWidth: CGFloat(physicalWidth))
+                    referenceImage.name = imageName
+                    referenceImages.insert(referenceImage)
+                } else {
+                    print("Failed to load image: \(imagePath)")
+                    success = false
+                }
+            }
+
+            DispatchQueue.main.async {
+                IosARView.cachedReferenceImages[cacheKey] = referenceImages
+                completion(success)
+            }
+        }
     }
     
     func loadImageFromAssets(imagePath: String) -> UIImage? {
         let key = FlutterDartProject.lookupKey(forAsset: imagePath)
-        return UIImage(named: key, in: Bundle.main, compatibleWith: nil)
+        if let directPath = Bundle.main.path(forResource: key, ofType: nil) {
+            return UIImage(contentsOfFile: directPath)
+        }
+        if let flutterAssetsPath = Bundle.main.path(forResource: "flutter_assets/\(key)", ofType: nil) {
+            return UIImage(contentsOfFile: flutterAssetsPath)
+        }
+        return nil
     }
     
     func handleImageDetection(imageAnchor: ARImageAnchor) {
@@ -946,7 +1034,9 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
             "transformation": transformation
         ]
         
-        sessionManagerChannel.invokeMethod("onImageDetected", arguments: arguments)
+        DispatchQueue.main.async {
+            self.sessionManagerChannel.invokeMethod("onImageDetected", arguments: arguments)
+        }
     }
 
     private func dismissCoachingOverlayIfNeeded() {

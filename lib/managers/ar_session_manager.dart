@@ -12,6 +12,7 @@ typedef ARHitResultHandler = void Function(List<ARHitTestResult> hits);
 typedef ARImageDetectionResultHandler = void Function(
     String imageName, Matrix4 transformation);
 typedef ARTrackingStateHandler = void Function(String state, String reason);
+typedef ARImageTrackingConfiguredHandler = void Function(bool success);
 
 /// Manages the session configuration, parameters and events of an [ARView]
 class ARSessionManager {
@@ -35,6 +36,9 @@ class ARSessionManager {
 
   /// Receives tracking state updates from the platform
   ARTrackingStateHandler? onTrackingStateChanged;
+
+  /// Receives a callback when image tracking database configuration finishes
+  ARImageTrackingConfiguredHandler? onImageTrackingConfigured;
 
   ARSessionManager(int id, this.buildContext, this.planeDetectionConfig,
       {this.debug = false}) {
@@ -147,6 +151,13 @@ class ARSessionManager {
             onTrackingStateChanged!(state, reason);
           }
           break;
+        case 'onImageTrackingConfigured':
+          if (onImageTrackingConfigured != null) {
+            final arguments = call.arguments as Map<dynamic, dynamic>;
+            final success = arguments['success'] as bool? ?? true;
+            onImageTrackingConfigured!(success);
+          }
+          break;
         case 'dispose':
           _channel.invokeMethod<void>("dispose");
           break;
@@ -164,7 +175,7 @@ class ARSessionManager {
   /// Function to initialize the platform-specific AR view. Can be used to initially set or update session settings.
   /// [customPlaneTexturePath] refers to flutter assets from the app that is calling this function, NOT to assets within this plugin. Make sure
   /// the assets are correctly registered in the pubspec.yaml of the parent app (e.g. the ./example app in this plugin's repo)
-  onInitialize({
+  Future<void> onInitialize({
     bool showAnimatedGuide = true,
     bool autoHideCoachingOverlay = true,
     bool showFeaturePoints = false,
@@ -177,8 +188,9 @@ class ARSessionManager {
     List<String>? trackingImagePaths,
     bool continuousImageTracking = false,
     int imageTrackingUpdateIntervalMs = 100,
-  }) {
-    _channel.invokeMethod<void>('init', {
+    double lightIntensityMultiplier = 1.0,
+  }) async {
+    await _channel.invokeMethod<void>('init', {
       'showAnimatedGuide': showAnimatedGuide,
       'autoHideCoachingOverlay': autoHideCoachingOverlay,
       'showFeaturePoints': showFeaturePoints,
@@ -192,7 +204,36 @@ class ARSessionManager {
       'trackingImagePaths': trackingImagePaths,
       'continuousImageTracking': continuousImageTracking,
       'imageTrackingUpdateIntervalMs': imageTrackingUpdateIntervalMs,
+      'lightIntensityMultiplier': lightIntensityMultiplier,
     });
+  }
+
+  /// Adjusts the lighting intensity multiplier for the AR scene.
+  /// A value of 1.0 keeps the default lighting. Higher values brighten the model.
+  Future<void> setLightIntensityMultiplier(double multiplier) async {
+    try {
+      await _channel.invokeMethod<void>('setLightIntensityMultiplier', {
+        'multiplier': multiplier,
+      });
+    } catch (e) {
+      print('Error caught: ' + e.toString());
+    }
+  }
+
+  /// Precompiles and caches the image tracking database asynchronously.
+  /// This can be called once to warm up the image database for faster reuse.
+  Future<bool> precompileImageTrackingDatabase(
+      List<String> trackingImagePaths) async {
+    try {
+      final result = await _channel.invokeMethod<bool>(
+        'precompileImageTrackingDatabase',
+        {'trackingImagePaths': trackingImagePaths},
+      );
+      return result ?? false;
+    } catch (e) {
+      print('Error caught: ' + e.toString());
+      return false;
+    }
   }
 
   /// Update image tracking settings after initialization.

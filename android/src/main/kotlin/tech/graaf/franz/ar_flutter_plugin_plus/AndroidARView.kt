@@ -35,6 +35,7 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.PlatformView
 import java.io.ByteArrayOutputStream
+import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.io.File
 import java.nio.FloatBuffer
@@ -70,6 +71,9 @@ internal class AndroidARView(
         id: Int,
         creationParams: Map<String?, Any?>?
 ) : PlatformView {
+    companion object {
+        private val cachedImageDatabaseBytes: MutableMap<String, ByteArray> = mutableMapOf()
+    }
     private val TAG = "AndroidARView"
 
     private lateinit var viewContext: Context
@@ -123,6 +127,8 @@ internal class AndroidARView(
 
     private val nonTrackingResetThreshold = 30
     private val modelIoExecutor = Executors.newFixedThreadPool(2)
+    private val imageTrackingExecutor = Executors.newSingleThreadExecutor()
+    private var androidModelScaleFactor: Float = 0.33f
     // Setting defaults
     private var enableRotation = false
     private var enablePans = false
@@ -148,6 +154,11 @@ internal class AndroidARView(
                         "init" -> {
                             initializeARView(call, result)
                         }
+                        "setLightIntensityMultiplier" -> {
+                            val multiplier = call.argument<Number>("multiplier")?.toFloat() ?: 1.0f
+                            modelRenderer.setLightIntensityMultiplier(multiplier)
+                            result.success(null)
+                        }
                         "updateImageTrackingSettings" -> {
                             val argTrackingImagePaths: List<String>? = call.argument<List<String>>("trackingImagePaths")
                             val argContinuousImageTracking: Boolean? = call.argument<Boolean>("continuousImageTracking")
@@ -159,6 +170,35 @@ internal class AndroidARView(
                                 intervalMs = argImageTrackingUpdateIntervalMs
                             )
                             result.success(null)
+                        }
+                        "precompileImageTrackingDatabase" -> {
+                            val argTrackingImagePaths: List<String>? = call.argument<List<String>>("trackingImagePaths")
+                            val imagePaths = argTrackingImagePaths ?: emptyList()
+                            val session = session
+                            if (session == null) {
+                                result.error("Error", "Session not initialized", null)
+                                return
+                            }
+
+                            imageTrackingExecutor.execute {
+                                var success = true
+                                try {
+                                    val cacheKey = imageCacheKey(imagePaths)
+                                    if (!cachedImageDatabaseBytes.containsKey(cacheKey)) {
+                                        val (imageDatabase, buildSuccess) = buildImageDatabase(session, imagePaths)
+                                        success = buildSuccess
+                                        val bytes = serializeImageDatabase(imageDatabase)
+                                        cachedImageDatabaseBytes[cacheKey] = bytes
+                                    }
+                                } catch (e: Exception) {
+                                    success = false
+                                    Log.e(TAG, "Error precompiling image database: ${e.message}")
+                                }
+
+                                activity.runOnUiThread {
+                                    result.success(success)
+                                }
+                            }
                         }
                         "getAnchorPose" -> {
                             val anchorName = call.argument<String>("anchorId")
@@ -232,6 +272,10 @@ internal class AndroidARView(
                         "init" -> {
                             // objectManagerChannel.invokeMethod("onError", listOf("ObjectTEST from
                             // Android"))
+                            val scaleFactor = call.argument<Double>("androidScaleFactor")
+                            if (scaleFactor != null) {
+                                androidModelScaleFactor = scaleFactor.toFloat()
+                            }
                         }
                         "addNode" -> {
                             val dict_node: HashMap<String, Any>? = call.arguments as? HashMap<String, Any>
@@ -512,6 +556,7 @@ internal class AndroidARView(
             lastAugmentedImageUpdateMs.clear()
 
             modelIoExecutor.shutdown()
+            imageTrackingExecutor.shutdown()
             
             onFrameUpdateListener = null
         } catch (e: Exception) {
@@ -534,6 +579,7 @@ internal class AndroidARView(
         val argTrackingImagePaths: List<String>? = call.argument<List<String>>("trackingImagePaths")
         val argContinuousImageTracking: Boolean? = call.argument<Boolean>("continuousImageTracking")
         val argImageTrackingUpdateIntervalMs: Number? = call.argument<Number>("imageTrackingUpdateIntervalMs")
+        val argLightIntensityMultiplier: Number? = call.argument<Number>("lightIntensityMultiplier")
 
         // Set up frame update listener
         onFrameUpdateListener = { frameTimeNanos ->
@@ -614,6 +660,11 @@ internal class AndroidARView(
         if (!isARInitialized) {
             onResume()
             isARInitialized = true
+        }
+
+        // Apply lighting multiplier if provided
+        argLightIntensityMultiplier?.toFloat()?.let { multiplier ->
+            modelRenderer.setLightIntensityMultiplier(multiplier)
         }
 
         result.success(null)
@@ -855,7 +906,7 @@ internal class AndroidARView(
 
     private fun getModelScaleFactor(nodeType: Int): Float {
         return when (nodeType) {
-            0, 1, 2, 3, 4 -> 0.33f
+            0, 1, 2, 3, 4 -> androidModelScaleFactor
             else -> 1.0f
         }
     }
@@ -1307,55 +1358,138 @@ internal class AndroidARView(
         if (intervalMs != null) {
             imageTrackingUpdateIntervalMs = intervalMs.toLong()
         }
-        imagePaths?.let { setupImageTracking(it) }
+        imagePaths?.let { setupImageTrackingAsync(it) }
     }
 
-    private fun setupImageTracking(imagePaths: List<String>) {
-        try {
-            val session = session ?: return
-            val config = session.config
-            
-            val imageDatabase = AugmentedImageDatabase(session)
-            
-            for (imagePath in imagePaths) {
-                try {
-                    val loader = FlutterInjector.instance().flutterLoader()
-                    val key = loader.getLookupKeyForAsset(imagePath)
-                    
-                    val inputStream = viewContext.assets.open(key)
-                    val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
-                    inputStream.close()
-                    
-                    if (bitmap != null) {
-                        val imageName = imagePath.substringAfterLast("/").substringBeforeLast(".")
-                        
-                        val physicalWidth = 0.2f // 20cm - adjust based on your actual printed image size
-                        val index = imageDatabase.addImage(imageName, bitmap, physicalWidth)
-                        
-                        if (index == -1) {
-                            Log.e(TAG, "Failed to add image to database: $imageName")
-                        }
-                    } else {
-                        Log.e(TAG, "Failed to load bitmap for: $imagePath")
+    private fun imageCacheKey(imagePaths: List<String>): String {
+        return imagePaths.joinToString("|")
+    }
+
+    private fun buildImageDatabase(session: Session, imagePaths: List<String>): Pair<AugmentedImageDatabase, Boolean> {
+        val imageDatabase = AugmentedImageDatabase(session)
+        var success = true
+
+        for (imagePath in imagePaths) {
+            try {
+                val loader = FlutterInjector.instance().flutterLoader()
+                val key = loader.getLookupKeyForAsset(imagePath)
+
+                val inputStream = viewContext.assets.open(key)
+                val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
+                inputStream.close()
+
+                if (bitmap != null) {
+                    val imageName = imagePath.substringAfterLast("/").substringBeforeLast(".")
+                    val physicalWidth = 0.2f // 20cm - adjust based on your actual printed image size
+                    val index = imageDatabase.addImage(imageName, bitmap, physicalWidth)
+
+                    if (index == -1) {
+                        Log.e(TAG, "Failed to add image to database: $imageName")
+                        success = false
                     }
-                } catch (e: Exception) {
-                    when (e.javaClass.simpleName) {
-                        "ImageInsufficientQualityException" -> {
-                            sessionManagerChannel.invokeMethod("onError", listOf("Image '$imagePath' has insufficient quality for AR tracking. Use images with more visual features like high contrast, corners, and varied textures."))
-                        }
-                        else -> {
-                            Log.e(TAG, "Error loading image $imagePath: ${e.message}")
+                } else {
+                    Log.e(TAG, "Failed to load bitmap for: $imagePath")
+                    success = false
+                }
+            } catch (e: Exception) {
+                success = false
+                when (e.javaClass.simpleName) {
+                    "ImageInsufficientQualityException" -> {
+                        activity.runOnUiThread {
+                            sessionManagerChannel.invokeMethod(
+                                "onError",
+                                listOf("Image '$imagePath' has insufficient quality for AR tracking. Use images with more visual features like high contrast, corners, and varied textures.")
+                            )
                         }
                     }
-                    e.printStackTrace()
+                    else -> {
+                        Log.e(TAG, "Error loading image $imagePath: ${e.message}")
+                    }
+                }
+                e.printStackTrace()
+            }
+        }
+
+        return Pair(imageDatabase, success)
+    }
+
+    private fun serializeImageDatabase(imageDatabase: AugmentedImageDatabase): ByteArray {
+        val outputStream = ByteArrayOutputStream()
+        imageDatabase.serialize(outputStream)
+        return outputStream.toByteArray()
+    }
+
+    private fun setupImageTrackingAsync(imagePaths: List<String>) {
+        val session = session ?: return
+        imageTrackingExecutor.execute {
+            try {
+                val cacheKey = imageCacheKey(imagePaths)
+                val cachedBytes = cachedImageDatabaseBytes[cacheKey]
+                if (cachedBytes != null) {
+                    activity.runOnUiThread {
+                        try {
+                            val config = session.config
+                            val inputStream = ByteArrayInputStream(cachedBytes)
+                            val imageDatabase = AugmentedImageDatabase.deserialize(session, inputStream)
+                            config.augmentedImageDatabase = imageDatabase
+                            session.configure(config)
+                            sessionManagerChannel.invokeMethod(
+                                "onImageTrackingConfigured",
+                                mapOf("success" to true, "cached" to true)
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error applying cached image database: ${e.message}")
+                            sessionManagerChannel.invokeMethod(
+                                "onError",
+                                listOf("Error applying cached image database: ${e.message}")
+                            )
+                            sessionManagerChannel.invokeMethod(
+                                "onImageTrackingConfigured",
+                                mapOf("success" to false)
+                            )
+                        }
+                    }
+                    return@execute
+                }
+
+                val (imageDatabase, success) = buildImageDatabase(session, imagePaths)
+                val bytes = serializeImageDatabase(imageDatabase)
+                cachedImageDatabaseBytes[cacheKey] = bytes
+
+                activity.runOnUiThread {
+                    try {
+                        val config = session.config
+                        config.augmentedImageDatabase = imageDatabase
+                        session.configure(config)
+                        sessionManagerChannel.invokeMethod(
+                            "onImageTrackingConfigured",
+                            mapOf("success" to success)
+                        )
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error setting up image tracking: ${e.message}")
+                        sessionManagerChannel.invokeMethod(
+                            "onError",
+                            listOf("Error setting up image tracking: ${e.message}")
+                        )
+                        sessionManagerChannel.invokeMethod(
+                            "onImageTrackingConfigured",
+                            mapOf("success" to false)
+                        )
+                    }
+                }
+            } catch (e: Exception) {
+                activity.runOnUiThread {
+                    Log.e(TAG, "Error setting up image tracking: ${e.message}")
+                    sessionManagerChannel.invokeMethod(
+                        "onError",
+                        listOf("Error setting up image tracking: ${e.message}")
+                    )
+                    sessionManagerChannel.invokeMethod(
+                        "onImageTrackingConfigured",
+                        mapOf("success" to false)
+                    )
                 }
             }
-            
-            config.augmentedImageDatabase = imageDatabase
-            session.configure(config)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error setting up image tracking: ${e.message}")
-            sessionManagerChannel.invokeMethod("onError", listOf("Error setting up image tracking: ${e.message}"))
         }
     }
 

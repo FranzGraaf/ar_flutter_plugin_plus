@@ -39,6 +39,7 @@ internal class ModelRenderer {
 
     private var lightEntity: Int = 0
     private var fillLightEntity: Int = 0
+    private var lightIntensityMultiplier: Float = 1.0f
 
     private val cameraLock = Any()
     private val cameraViewMatrix = FloatArray(16)
@@ -79,22 +80,45 @@ internal class ModelRenderer {
             if (instance == 0) return@post
             val fillInstance = if (fillLightEntity != 0) lightManager.getInstance(fillLightEntity) else 0
 
+            val primaryBaseIntensity = 100000.0f * lightIntensityMultiplier
+            val fillBaseIntensity = 20000.0f * lightIntensityMultiplier
+
             if (lightEstimate.state == com.google.ar.core.LightEstimate.State.VALID) {
                 val colorCorrection = FloatArray(4)
                 lightEstimate.getColorCorrection(colorCorrection, 0)
                 val pixelIntensity = lightEstimate.pixelIntensity
                 lightManager.setColor(instance, colorCorrection[0], colorCorrection[1], colorCorrection[2])
-                lightManager.setIntensity(instance, 100000.0f * pixelIntensity)
+                lightManager.setIntensity(instance, primaryBaseIntensity * pixelIntensity)
                 if (fillInstance != 0) {
                     lightManager.setColor(fillInstance, 1.0f, 1.0f, 1.0f)
-                    lightManager.setIntensity(fillInstance, 20000.0f * pixelIntensity)
+                    lightManager.setIntensity(fillInstance, fillBaseIntensity * pixelIntensity)
                 }
             } else {
                 lightManager.setColor(instance, 1.0f, 1.0f, 1.0f)
-                lightManager.setIntensity(instance, 100000.0f)
+                lightManager.setIntensity(instance, primaryBaseIntensity)
                 if (fillInstance != 0) {
                     lightManager.setColor(fillInstance, 1.0f, 1.0f, 1.0f)
-                    lightManager.setIntensity(fillInstance, 20000.0f)
+                    lightManager.setIntensity(fillInstance, fillBaseIntensity)
+                }
+            }
+        }
+    }
+
+    fun setLightIntensityMultiplier(multiplier: Float) {
+        val clamped = if (multiplier.isFinite()) multiplier else 1.0f
+        lightIntensityMultiplier = if (clamped <= 0f) 0.01f else clamped
+        mainHandler.post {
+            val engine = engine ?: return@post
+            if (lightEntity == 0) return@post
+            val lightManager = engine.lightManager
+            val instance = lightManager.getInstance(lightEntity)
+            if (instance != 0) {
+                lightManager.setIntensity(instance, 100000.0f * lightIntensityMultiplier)
+            }
+            if (fillLightEntity != 0) {
+                val fillInstance = lightManager.getInstance(fillLightEntity)
+                if (fillInstance != 0) {
+                    lightManager.setIntensity(fillInstance, 20000.0f * lightIntensityMultiplier)
                 }
             }
         }
