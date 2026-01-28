@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.3
+
+- additional scaling options
+- additional lighting options
+- pre-chaching of trackable images
+
 ## 1.1.2
 
 - import fix
