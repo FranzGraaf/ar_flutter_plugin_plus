@@ -78,7 +78,8 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
     this.arSessionManager!.onImageDetected = onImageDetected;
   }
 
-  void onImageDetected(String imageName, Matrix4 transformation) {
+  void onImageDetected(
+      String imageName, Matrix4 transformation, double width, double height) {
     setState(() {
       lastScannedImageName = imageName;
     });

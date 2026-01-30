@@ -10,7 +10,7 @@ import 'package:vector_math/vector_math_64.dart';
 // Type definitions to enforce a consistent use of the API
 typedef ARHitResultHandler = void Function(List<ARHitTestResult> hits);
 typedef ARImageDetectionResultHandler = void Function(
-    String imageName, Matrix4 transformation);
+    String imageName, Matrix4 transformation, double width, double height);
 typedef ARTrackingStateHandler = void Function(String state, String reason);
 typedef ARImageTrackingConfiguredHandler = void Function(bool success);
 
@@ -140,7 +140,9 @@ class ARSessionManager {
             final imageName = arguments['imageName'] as String;
             final transformation = MatrixConverter()
                 .fromJson(arguments['transformation'] as List<dynamic>);
-            onImageDetected!(imageName, transformation);
+            final width = arguments['width'] as double;
+            final height = arguments['height'] as double;
+            onImageDetected!(imageName, transformation, width, height);
           }
           break;
         case 'onTrackingState':
@@ -186,6 +188,8 @@ class ARSessionManager {
     bool handlePans = false, // nodes are not draggable by default
     bool handleRotation = false, // nodes can not be rotated by default
     List<String>? trackingImagePaths,
+    Map<String, Uint8List>? trackingImageByteMap,
+    String? trackingImageDbPath, // Android only
     bool continuousImageTracking = false,
     int imageTrackingUpdateIntervalMs = 100,
     double lightIntensityMultiplier = 1.0,
@@ -205,6 +209,8 @@ class ARSessionManager {
       'continuousImageTracking': continuousImageTracking,
       'imageTrackingUpdateIntervalMs': imageTrackingUpdateIntervalMs,
       'lightIntensityMultiplier': lightIntensityMultiplier,
+      'trackingImageByteMap': trackingImageByteMap,
+      'trackingImageDbPath': trackingImageDbPath,
     });
   }
 
