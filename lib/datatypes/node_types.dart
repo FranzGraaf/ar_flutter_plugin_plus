@@ -5,4 +5,5 @@ enum NodeType {
   webGLB, // Node with renderable with fileending .glb loaded from the internet during runtime
   fileSystemAppFolderGLB, // Node with renderable with fileending .glb in the documents folder of the current app
   fileSystemAppFolderGLTF2, // Node with renderable with fileending .gltf in the documents folder of the current app
+  localPNG, // Node with image with fileending .png in the Flutter asset folder
 }

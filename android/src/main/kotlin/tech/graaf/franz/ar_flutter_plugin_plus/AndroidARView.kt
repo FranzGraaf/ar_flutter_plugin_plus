@@ -690,21 +690,6 @@ internal class AndroidARView(
 
     }
 
-    private fun addImageNodeToTrackingImage(
-        imagePath: String,
-        trackingImageKey: String?,
-        x: Float?,
-        y: Float?
-    ): CompletableFuture<Boolean> {
-        val completableFutureSuccess: CompletableFuture<Boolean> = CompletableFuture()
-        try {
-        } catch (e: java.lang.Exception) {
-            completableFutureSuccess.completeExceptionally(e)
-        }
-
-        return completableFutureSuccess
-    }
-
     private fun addNode(dict_node: HashMap<String, Any>, dict_anchor: HashMap<String, Any>? = null): CompletableFuture<Boolean>{
         val completableFutureSuccess: CompletableFuture<Boolean> = CompletableFuture()
 
@@ -779,6 +764,32 @@ internal class AndroidARView(
                             modelRenderer.loadGltf(node.name, gltfBytes, resourceMap)
                         }
                     }
+                    5 -> { // localPNG
+                        val pngBytes = readFlutterAssetBytes(node.uri)
+                        // Load the unlit material file from Flutter plugin assets
+                        val unlitImageMaterialBytes = try {
+                            readPluginAssetBytes("assets/image_unlit.filamat")
+                        } catch (e: Exception) {
+                            Log.e("AndroidARView", "Failed to load image_unlit.filamat: ${e.message}")
+                            activity.runOnUiThread {
+                                sessionManagerChannel.invokeMethod("onError", listOf("Failed to load material file: ${e.message}"))
+                            }
+                            return@execute
+                        }
+                        
+                        if (unlitImageMaterialBytes.isEmpty()) {
+                            Log.e("AndroidARView", "image_unlit.filamat is empty")
+                            activity.runOnUiThread {
+                                sessionManagerChannel.invokeMethod("onError", listOf("Material file is empty"))
+                            }
+                            return@execute
+                        }
+                        
+                        Log.d("AndroidARView", "Loaded image_unlit.filamat: ${unlitImageMaterialBytes.size} bytes")
+                        glSurfaceView.queueEvent {
+                            modelRenderer.loadImage(node.name, pngBytes, unlitImageMaterialBytes)
+                        }
+                    }
                     else -> {
                         activity.runOnUiThread {
                             sessionManagerChannel.invokeMethod("onError", listOf("Unsupported node type ${node.type}"))
@@ -800,6 +811,16 @@ internal class AndroidARView(
             loader.ensureInitializationComplete(viewContext, null)
         }
         val key = loader.getLookupKeyForAsset(path)
+        return viewContext.assets.open(key).readBytes()
+    }
+
+    private fun readPluginAssetBytes(path: String): ByteArray {
+        val loader = FlutterInjector.instance().flutterLoader()
+        if (!loader.initialized()) {
+            loader.startInitialization(viewContext)
+            loader.ensureInitializationComplete(viewContext, null)
+        }
+        val key = loader.getLookupKeyForAsset(path, "ar_flutter_plugin_plus")
         return viewContext.assets.open(key).readBytes()
     }
 
