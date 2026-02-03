@@ -9,7 +9,6 @@ import android.view.Choreographer
 import android.view.Surface
 import android.view.TextureView
 import com.google.android.filament.*
-import com.google.android.filament.android.TextureHelper
 import com.google.android.filament.android.UiHelper
 import com.google.android.filament.gltfio.AssetLoader
 import com.google.android.filament.gltfio.FilamentAsset
@@ -214,7 +213,7 @@ internal class ModelRenderer {
     fun loadImage(
         name: String,
         pngBytes: ByteArray,
-        unlitImageMaterialBytes: ByteArray
+        unlitImageMaterialBytes: ByteArray,
     ) {
         mainHandler.post {
             ensureEngine()

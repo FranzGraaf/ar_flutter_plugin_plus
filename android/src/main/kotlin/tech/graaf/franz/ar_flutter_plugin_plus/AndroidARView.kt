@@ -45,7 +45,6 @@ import java.util.regex.Pattern
 
 import android.R
 import android.view.ViewGroup
-import android.widget.ImageView
 import java.io.FileInputStream
 
 
@@ -786,6 +785,7 @@ internal class AndroidARView(
                         }
                         
                         Log.d("AndroidARView", "Loaded image_unlit.filamat: ${unlitImageMaterialBytes.size} bytes")
+
                         glSurfaceView.queueEvent {
                             modelRenderer.loadImage(node.name, pngBytes, unlitImageMaterialBytes)
                         }
@@ -933,7 +933,7 @@ internal class AndroidARView(
 
     private fun getModelScaleFactor(nodeType: Int): Float {
         return when (nodeType) {
-            0, 1, 2, 3, 4 -> androidModelScaleFactor
+            0, 1, 2, 3, 4, 5 -> androidModelScaleFactor
             else -> 1.0f
         }
     }
