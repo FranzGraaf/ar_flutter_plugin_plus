@@ -12,7 +12,6 @@ import 'package:ar_flutter_plugin_plus/managers/ar_anchor_manager.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_location_manager.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_object_manager.dart';
 import 'package:ar_flutter_plugin_plus/managers/ar_session_manager.dart';
-import 'package:ar_flutter_plugin_plus/widgets/ar_view.dart';
 import 'package:ar_flutter_plugin_plus_example/examples/cloudanchorexample.dart';
 import 'package:ar_flutter_plugin_plus_example/examples/localandwebobjectsexample.dart';
 import 'package:ar_flutter_plugin_plus_example/examples/debugoptionsexample.dart';
@@ -100,13 +99,13 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
-  Future<void> _onPrecompileARViewCreated(
+  Future<bool> _onPrecompileARViewCreated(
       ARSessionManager arSessionManager,
       ARObjectManager arObjectManager,
       ARAnchorManager arAnchorManager,
       ARLocationManager arLocationManager) async {
     if (_precompileInProgress || _precompileDone) {
-      return;
+      return false;
     }
     _precompileInProgress = true;
     bool success = false;
@@ -132,6 +131,7 @@ class _MyAppState extends State<MyApp> {
           _precompileViewVisible = false;
         });
       }
+      return success;
     }
   }
 }

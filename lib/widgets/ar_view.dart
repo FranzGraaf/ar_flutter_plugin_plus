@@ -28,9 +28,9 @@ abstract class PlatformARView {
   }
 
   Widget build(
-      {@required BuildContext context,
-      @required ARViewCreatedCallback arViewCreatedCallback,
-      @required PlaneDetectionConfig planeDetectionConfig});
+      {required BuildContext context,
+      required ARViewCreatedCallback arViewCreatedCallback,
+      required PlaneDetectionConfig planeDetectionConfig});
 
   /// Callback function that is executed once the view is established
   void onPlatformViewCreated(int id);
