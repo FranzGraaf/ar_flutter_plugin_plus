@@ -131,9 +131,9 @@ Matrix4 createTransformMatrix(Matrix4? origin, Vector3? position,
     transform.matrixEulerAngles = eulerAngles;
   }
   if (scale != null) {
-    transform.scale(scale.x, scale.y, scale.z);
+    transform.scaleByVector3(scale);
   } else {
-    transform.scale(1.0, 1.0, 1.0);
+    transform.scaleByVector3(Vector3(1, 1, 1));
   }
   return transform;
 }

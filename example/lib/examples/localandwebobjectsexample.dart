@@ -13,7 +13,6 @@ import 'package:ar_flutter_plugin_plus/models/ar_node.dart';
 import 'package:vector_math/vector_math_64.dart';
 import 'dart:math';
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter_archive/flutter_archive.dart';
 
 class LocalAndWebObjectsWidget extends StatefulWidget {
   LocalAndWebObjectsWidget({Key? key}) : super(key: key);
@@ -128,25 +127,6 @@ class _LocalAndWebObjectsWidgetState extends State<LocalAndWebObjectsWidget> {
     return file;
   }
 
-  Future<void> _downloadAndUnpack(String url, String filename) async {
-    var request = await httpClient!.getUrl(Uri.parse(url));
-    var response = await request.close();
-    var bytes = await consolidateHttpClientResponseBytes(response);
-    String dir = (await getApplicationDocumentsDirectory()).path;
-    File file = new File('$dir/$filename');
-    await file.writeAsBytes(bytes);
-    print("Downloading finished, path: " + '$dir/$filename');
-
-    // To print all files in the directory: print(Directory(dir).listSync());
-    try {
-      await ZipFile.extractToDirectory(
-          zipFile: File('$dir/$filename'), destinationDir: Directory(dir));
-      print("Unzipping successful");
-    } catch (e) {
-      print("Unzipping failed: " + e.toString());
-    }
-  }
-
   Future<void> onLocalObjectAtOriginButtonPressed() async {
     if (this.localObjectNode != null) {
       this.arObjectManager!.removeNode(this.localObjectNode!);
@@ -225,7 +205,7 @@ class _LocalAndWebObjectsWidgetState extends State<LocalAndWebObjectsWidget> {
 
       newTransform.setTranslation(newTranslation);
       newTransform.rotate(newRotationAxis, newRotationAmount);
-      newTransform.scale(newScale);
+      newTransform.scaleByVector3(Vector3(newScale, newScale, newScale));
 
       this.localObjectNode!.transform = newTransform;
     }
@@ -247,7 +227,7 @@ class _LocalAndWebObjectsWidgetState extends State<LocalAndWebObjectsWidget> {
 
       newTransform.setTranslation(newTranslation);
       newTransform.rotate(newRotationAxis, newRotationAmount);
-      newTransform.scale(newScale);
+      newTransform.scaleByVector3(Vector3(newScale, newScale, newScale));
 
       this.webObjectNode!.transform = newTransform;
     }

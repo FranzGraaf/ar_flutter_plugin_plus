@@ -22,8 +22,6 @@ class _DebugOptionsWidgetState extends State<DebugOptionsWidget> {
   String _planeTexturePath = "Images/triangle.png";
   bool _handleTaps = false;
   late final Widget _arView;
-  String _trackingState = 'UNKNOWN';
-  String _trackingReason = 'NONE';
 
   @override
   void initState() {
@@ -115,10 +113,7 @@ class _DebugOptionsWidgetState extends State<DebugOptionsWidget> {
     this.arObjectManager = arObjectManager;
     this.arSessionManager!.onTrackingStateChanged = (state, reason) {
       if (mounted) {
-        setState(() {
-          _trackingState = state;
-          _trackingReason = reason;
-        });
+        setState(() {});
       }
     };
 
