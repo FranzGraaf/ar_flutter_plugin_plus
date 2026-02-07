@@ -391,6 +391,9 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
     
         // Update session configuration
         self.sceneView.session.run(configuration)
+        
+        // Complete the Flutter future
+        result(nil)
     }
 
     func renderer(_ renderer: SCNSceneRenderer, didAdd node: SCNNode, for anchor: ARAnchor) {
