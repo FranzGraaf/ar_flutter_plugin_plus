@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
@@ -38,6 +39,7 @@ import java.io.IOException
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -113,6 +115,7 @@ internal class AndroidARView(
     private val modelIoExecutor = Executors.newFixedThreadPool(2)
     private val imageTrackingExecutor = Executors.newSingleThreadExecutor()
     private var androidModelScaleFactor: Float = 0.33f
+    private val maxImageDimensionPx = 1024
     // Setting defaults
     private var enableRotation = false
     private var enablePans = false
@@ -1545,11 +1548,46 @@ internal class AndroidARView(
     }
 
     private fun imageCacheKey(imagePaths: List<String>): String {
-        return imagePaths.joinToString("|")
+        return hashCacheKey("paths|${imagePaths.joinToString("|")}")
     }
 
     private fun imageCacheKey(imageByteMap: Map<String, ByteArray>): String {
-        return imageByteMap.keys.joinToString("|")
+        val digest = MessageDigest.getInstance("SHA-256")
+        imageByteMap.toSortedMap().forEach { (key, value) ->
+            digest.update(key.toByteArray())
+            digest.update(value)
+        }
+        return digest.digest().toHexString()
+    }
+
+    private fun hashCacheKey(value: String): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(value.toByteArray())
+        return digest.digest().toHexString()
+    }
+
+    private fun ByteArray.toHexString(): String {
+        val sb = StringBuilder(size * 2)
+        for (b in this) {
+            sb.append(String.format("%02x", b))
+        }
+        return sb.toString()
+    }
+
+    private fun getImageDatabaseCacheFile(cacheKey: String): File {
+        return File(viewContext.cacheDir, "ar_imgdb_${cacheKey}.imgdb")
+    }
+
+    private fun readCachedImageDatabaseBytes(cacheKey: String): ByteArray? {
+        val file = getImageDatabaseCacheFile(cacheKey)
+        if (!file.exists()) {
+            return null
+        }
+        return try {
+            file.readBytes()
+        } catch (e: Exception) {
+            null
+        }
     }
 
     private fun buildImageDatabase(session: Session, imagePaths: List<String>): Pair<AugmentedImageDatabase, Boolean> {
@@ -1562,15 +1600,15 @@ internal class AndroidARView(
                 val loader = FlutterInjector.instance().flutterLoader()
                 val key = loader.getLookupKeyForAsset(imagePath)
 
-                val inputStream = viewContext.assets.open(key)
-                val bitmap = android.graphics.BitmapFactory.decodeStream(inputStream)
-                inputStream.close()
+                val bytes = viewContext.assets.open(key).use { it.readBytes() }
+                val bitmap = decodeDownsampledBitmap(bytes)
 
                 if (bitmap != null) {
                     val imageName = imagePath.substringAfterLast("/").substringBeforeLast(".")
                     val physicalWidth =
                         0.2f // 20cm - adjust based on your actual printed image size
                     val index = imageDatabase.addImage(imageName, bitmap, physicalWidth)
+                    bitmap.recycle()
 
                     if (index == -1) {
                         Log.e(TAG, "Failed to add image to database: $imageName")
@@ -1648,7 +1686,7 @@ internal class AndroidARView(
 
     private fun loadImageBitmap(bitmapData: ByteArray): Bitmap? {
         try {
-            return  android.graphics.BitmapFactory.decodeByteArray(bitmapData, 0, bitmapData.size)
+            return decodeDownsampledBitmap(bitmapData)
         } catch (e: Exception) {
             Log.e(TAG, "IO exception loading augmented image bitmap.", e)
             return  null
@@ -1661,6 +1699,54 @@ internal class AndroidARView(
         return outputStream.toByteArray()
     }
 
+    private fun decodeDownsampledBitmap(bitmapData: ByteArray): Bitmap? {
+        val options = BitmapFactory.Options()
+        options.inJustDecodeBounds = true
+        BitmapFactory.decodeByteArray(bitmapData, 0, bitmapData.size, options)
+        options.inSampleSize = calculateInSampleSize(options, maxImageDimensionPx, maxImageDimensionPx)
+        options.inJustDecodeBounds = false
+        options.inPreferredConfig = Bitmap.Config.ARGB_8888
+        return BitmapFactory.decodeByteArray(bitmapData, 0, bitmapData.size, options)
+    }
+
+    private fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
+        val (height: Int, width: Int) = options.outHeight to options.outWidth
+        var inSampleSize = 1
+        if (height > reqHeight || width > reqWidth) {
+            var halfHeight = height / 2
+            var halfWidth = width / 2
+            while (halfHeight / inSampleSize >= reqHeight && halfWidth / inSampleSize >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize
+    }
+
+    private fun applyImageDatabaseSafely(session: Session, imageDatabase: AugmentedImageDatabase) {
+        val wasResumed = isSessionResumed
+        if (wasResumed) {
+            try {
+                session.pause()
+                isSessionResumed = false
+            } catch (e: Exception) {
+                Log.e(TAG, "Error pausing session for image database configure: ${e.message}")
+            }
+        }
+
+        val config = session.config
+        config.augmentedImageDatabase = imageDatabase
+        session.configure(config)
+
+        if (wasResumed && !isShuttingDown() && renderer.isSurfaceCreated) {
+            try {
+                session.resume()
+                isSessionResumed = true
+            } catch (e: Exception) {
+                Log.e(TAG, "Error resuming session after image database configure: ${e.message}")
+            }
+        }
+    }
+
     private fun setupImageTrackingAsync(imagePaths: List<String>) {
         val session = session ?: return
         imageTrackingExecutor.execute {
@@ -1670,17 +1756,17 @@ internal class AndroidARView(
             try {
                 val cacheKey = imageCacheKey(imagePaths)
                 val cachedBytes = cachedImageDatabaseBytes[cacheKey]
+                    ?: readCachedImageDatabaseBytes(cacheKey)
                 if (cachedBytes != null) {
+                    cachedImageDatabaseBytes[cacheKey] = cachedBytes
                     activity.runOnUiThread {
                         if (isShuttingDown()) {
                             return@runOnUiThread
                         }
                         try {
-                            val config = session.config
                             val inputStream = ByteArrayInputStream(cachedBytes)
                             val imageDatabase = AugmentedImageDatabase.deserialize(session, inputStream)
-                            config.augmentedImageDatabase = imageDatabase
-                            session.configure(config)
+                            applyImageDatabaseSafely(session, imageDatabase)
                             sessionManagerChannel.invokeMethod(
                                 "onImageTrackingConfigured",
                                 mapOf("success" to true, "cached" to true)
@@ -1703,15 +1789,14 @@ internal class AndroidARView(
                 val (imageDatabase, success) = buildImageDatabase(session, imagePaths)
                 val bytes = serializeImageDatabase(imageDatabase)
                 cachedImageDatabaseBytes[cacheKey] = bytes
+                getImageDatabaseCacheFile(cacheKey).writeBytes(bytes)
 
                 activity.runOnUiThread {
                     if (isShuttingDown()) {
                         return@runOnUiThread
                     }
                     try {
-                        val config = session.config
-                        config.augmentedImageDatabase = imageDatabase
-                        session.configure(config)
+                        applyImageDatabaseSafely(session, imageDatabase)
                         sessionManagerChannel.invokeMethod(
                             "onImageTrackingConfigured",
                             mapOf("success" to success)
@@ -1755,18 +1840,48 @@ internal class AndroidARView(
             }
             try {
                 val cacheKey = imageCacheKey(imageByteMap)
+                val cachedBytes = cachedImageDatabaseBytes[cacheKey]
+                    ?: readCachedImageDatabaseBytes(cacheKey)
+                if (cachedBytes != null) {
+                    cachedImageDatabaseBytes[cacheKey] = cachedBytes
+                    activity.runOnUiThread {
+                        if (isShuttingDown()) {
+                            return@runOnUiThread
+                        }
+                        try {
+                            val inputStream = ByteArrayInputStream(cachedBytes)
+                            val imageDatabase = AugmentedImageDatabase.deserialize(session, inputStream)
+                            applyImageDatabaseSafely(session, imageDatabase)
+                            sessionManagerChannel.invokeMethod(
+                                "onImageTrackingConfigured",
+                                mapOf("success" to true, "cached" to true)
+                            )
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error applying cached image database: ${e.message}")
+                            sessionManagerChannel.invokeMethod(
+                                "onError",
+                                listOf("Error applying cached image database: ${e.message}")
+                            )
+                            sessionManagerChannel.invokeMethod(
+                                "onImageTrackingConfigured",
+                                mapOf("success" to false)
+                            )
+                        }
+                    }
+                    return@execute
+                }
+
                 val (imageDatabase, success) = buildImageDatabase(session, imageByteMap)
                 val bytes = serializeImageDatabase(imageDatabase)
                 cachedImageDatabaseBytes[cacheKey] = bytes
+                getImageDatabaseCacheFile(cacheKey).writeBytes(bytes)
 
                 activity.runOnUiThread {
                     if (isShuttingDown()) {
                         return@runOnUiThread
                     }
                     try {
-                        val config = session.config
-                        config.augmentedImageDatabase = imageDatabase
-                        session.configure(config)
+                        applyImageDatabaseSafely(session, imageDatabase)
                         sessionManagerChannel.invokeMethod(
                             "onImageTrackingConfigured",
                             mapOf("success" to success)
@@ -1816,9 +1931,7 @@ internal class AndroidARView(
                         return@runOnUiThread
                     }
                     try {
-                        val config = session.config
-                        config.augmentedImageDatabase = imageDatabase
-                        session.configure(config)
+                        applyImageDatabaseSafely(session, imageDatabase)
                         sessionManagerChannel.invokeMethod(
                             "onImageTrackingConfigured",
                             mapOf("success" to success)
