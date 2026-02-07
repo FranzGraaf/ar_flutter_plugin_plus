@@ -72,7 +72,7 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
           ],
           continuousImageTracking: false,
           imageTrackingUpdateIntervalMs: 1000,
-          lightIntensityMultiplier: 2000,
+          lightIntensityMultiplier: 1,
         );
     this.arObjectManager!.onInitialize();
     this.arSessionManager!.onImageDetected = onImageDetected;
@@ -98,7 +98,7 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
 
       if (node == null) {
         var imageNode = ARNode(
-          type: NodeType.localGLB,
+          type: NodeType.localGLTF2,
           uri: modelUrl,
           transformation: modelTransform,
         );
