@@ -116,7 +116,7 @@ internal class AndroidARView(
     private val modelIoExecutor = Executors.newFixedThreadPool(2)
     private val imageTrackingExecutor = Executors.newSingleThreadExecutor()
     private var androidModelScaleFactor: Float = 0.33f
-    private val maxImageDimensionPx = 1024
+    private val maxImageDimensionPx = 512
     // Setting defaults
     private var enableRotation = false
     private var enablePans = false
