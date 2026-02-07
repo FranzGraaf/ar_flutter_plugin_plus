@@ -68,7 +68,13 @@ class _ImageMarkerTrackingState extends State<ImageMarkerTracking> {
           showWorldOrigin: false,
           handleTaps: false,
           trackingImagePaths: [
-            "Images/augmented-images-earth.jpg", // this image is already precached with the setup in main.dart
+            // this images are already precached with the setup in main.dart
+            "Images/augmented-images-earth.jpg",
+            "Images/tile_2_r1c2.png",
+            "Images/tile_3_r2c1.png",
+            "Images/tile_4_r2c2.png",
+            "Images/tile_5_r3c1.png",
+            "Images/tile_6_r3c2.png",
           ],
           continuousImageTracking: false,
           imageTrackingUpdateIntervalMs: 1000,

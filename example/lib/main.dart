@@ -31,6 +31,11 @@ class _MyAppState extends State<MyApp> {
   static const String _title = 'AR Plugin Demo';
   static const List<String> _precompileTrackingImages = [
     "Images/augmented-images-earth.jpg",
+    "Images/tile_2_r1c2.png",
+    "Images/tile_3_r2c1.png",
+    "Images/tile_4_r2c2.png",
+    "Images/tile_5_r3c1.png",
+    "Images/tile_6_r3c2.png",
   ];
   bool _precompileInProgress = false;
   bool _precompileDone = false;

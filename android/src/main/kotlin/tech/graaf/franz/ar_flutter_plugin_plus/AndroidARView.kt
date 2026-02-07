@@ -73,6 +73,7 @@ internal class AndroidARView(
     private val objectManagerChannel = MethodChannel(messenger, "arobjects_$id")
     private val anchorManagerChannel = MethodChannel(messenger, "aranchors_$id")
 
+    @Volatile
     private var session: Session? = null
     private var currentFrame: Frame? = null
 
@@ -135,6 +136,9 @@ internal class AndroidARView(
     private var isDisposed = false
     private var isDestroying = false
     private var lifecycleCallbacksRegistered = false
+    private val sessionLock = Any()
+    @Volatile
+    private var sessionGeneration = 0
 
     private fun isShuttingDown(): Boolean {
         return isDisposed || isDestroying
@@ -431,6 +435,7 @@ internal class AndroidARView(
                 activity.application.unregisterActivityLifecycleCallbacks(activityLifecycleCallbacks)
                 lifecycleCallbacksRegistered = false
             }
+            pauseSessionForDispose()
             onPause()
             onDestroy()
             // ARCore session cleanup handled in onDestroy
@@ -438,6 +443,16 @@ internal class AndroidARView(
             e.printStackTrace()
         } finally {
             isDisposed = true
+        }
+    }
+
+    private fun pauseSessionForDispose() {
+        try {
+            synchronized(sessionLock) {
+                session?.pause()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error pausing session during dispose: ${e.message}")
         }
     }
 
@@ -522,7 +537,9 @@ internal class AndroidARView(
                         }
                         if (session != null && isSessionResumed) {
                             try {
-                                session?.pause()
+                                synchronized(sessionLock) {
+                                    session?.pause()
+                                }
                                 isSessionResumed = false
                             } catch (e: Exception) {
                                 Log.e(TAG, "Error in onActivityPaused: ${e.message}")
@@ -573,7 +590,9 @@ internal class AndroidARView(
         }
         if (session != null && isSessionResumed) {
             try {
-                session?.pause()
+                synchronized(sessionLock) {
+                    session?.pause()
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error pausing session: ${e.message}")
             }
@@ -594,7 +613,9 @@ internal class AndroidARView(
 
     private fun resumeSessionInternal() {
         try {
-            session?.resume()
+            synchronized(sessionLock) {
+                session?.resume()
+            }
             isSessionResumed = true
             pendingSessionResume = false
         } catch (e: Exception) {
@@ -607,15 +628,34 @@ internal class AndroidARView(
             return
         }
         try {
+            isDestroying = true
             isSessionResumed = false
             onFrameUpdateListener = null
             worldOriginAnchor?.detach()
             worldOriginAnchor = null
             val sessionToClose = session
+            session = null
+            sessionGeneration++
+            renderer.session = null
             if (sessionToClose != null) {
                 glSurfaceView.queueEvent {
                     try {
-                        sessionToClose.close()
+                        synchronized(sessionLock) {
+                            try {
+                                sessionToClose.pause()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error pausing session before close: ${e.message}")
+                            }
+                            try {
+                                // Reset the image database before close to avoid stale tracking state.
+                                val config = sessionToClose.config
+                                config.augmentedImageDatabase = AugmentedImageDatabase(sessionToClose)
+                                sessionToClose.configure(config)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Error resetting image database before close: ${e.message}")
+                            }
+                            sessionToClose.close()
+                        }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error closing session on GL thread: ${e.message}")
                     } finally {
@@ -696,6 +736,7 @@ internal class AndroidARView(
         // Create and configure ARCore session
         if (session == null) {
             session = Session(activity)
+            sessionGeneration++
             renderer.session = session
             if (backgroundRenderer.textureId != -1) {
                 session?.setCameraTextureName(backgroundRenderer.textureId)
@@ -826,13 +867,11 @@ internal class AndroidARView(
                 return@execute
             }
             try {
-                Log.d(TAG, "Loading node '${node.name}' type=${node.type} uri=${node.uri}")
                 when (node.type) {
                     0 -> { // localGLTF2
                         val gltfBytes = readFlutterAssetBytes(node.uri)
                         val basePath = node.uri.substringBeforeLast("/", "")
                         val resourceMap = loadGltfResourcesFromAssets(gltfBytes, basePath)
-                        Log.d(TAG, "GLTF bytes=${gltfBytes.size} resources=${resourceMap.size}")
                         // Parsing glTF with external resources is not yet wired; keep step-by-step.
                         glSurfaceView.queueEvent {
                             if (isShuttingDown()) {
@@ -843,7 +882,6 @@ internal class AndroidARView(
                     }
                     1 -> { // localGLB
                         val glbBytes = readFlutterAssetBytes(node.uri)
-                        Log.d(TAG, "GLB bytes=${glbBytes.size}")
                         glSurfaceView.queueEvent {
                             if (isShuttingDown()) {
                                 return@queueEvent
@@ -853,7 +891,6 @@ internal class AndroidARView(
                     }
                     2 -> { // webGLB
                         val glbBytes = readUrlBytes(node.uri)
-                        Log.d(TAG, "Web GLB bytes=${glbBytes.size}")
                         glSurfaceView.queueEvent {
                             if (isShuttingDown()) {
                                 return@queueEvent
@@ -863,7 +900,6 @@ internal class AndroidARView(
                     }
                     3 -> { // fileSystemAppFolderGLB
                         val glbBytes = readFileBytes(node.uri)
-                        Log.d(TAG, "File GLB bytes=${glbBytes.size}")
                         glSurfaceView.queueEvent {
                             if (isShuttingDown()) {
                                 return@queueEvent
@@ -875,7 +911,6 @@ internal class AndroidARView(
                         val gltfBytes = readFileBytes(node.uri)
                         val basePath = File(node.uri).parent ?: ""
                         val resourceMap = loadGltfResourcesFromFile(gltfBytes, basePath)
-                        Log.d(TAG, "File GLTF bytes=${gltfBytes.size} resources=${resourceMap.size}")
                         // Parsing glTF with external resources is not yet wired; keep step-by-step.
                         glSurfaceView.queueEvent {
                             if (isShuttingDown()) {
@@ -886,7 +921,6 @@ internal class AndroidARView(
                     }
                     5 -> { // localPNG
                         val pngBytes = readFlutterAssetBytes(node.uri)
-                        Log.d(TAG, "PNG bytes=${pngBytes.size}")
                         // Load the unlit material file from Flutter plugin assets
                         val unlitImageMaterialBytes = try {
                             readPluginAssetBytes("assets/image_unlit.filamat")
@@ -1652,6 +1686,7 @@ internal class AndroidARView(
                 val physicalWidth =
                     0.2f // 20cm - adjust based on your actual printed image size
                 val index = imageDatabase.addImage(imageName, bitmap, physicalWidth)
+                bitmap.recycle()
                 if (index == -1) {
                     Log.e(TAG, "Failed to add image to database: $imageName")
                     success = false
@@ -1722,33 +1757,51 @@ internal class AndroidARView(
         return inSampleSize
     }
 
-    private fun applyImageDatabaseSafely(session: Session, imageDatabase: AugmentedImageDatabase) {
-        val wasResumed = isSessionResumed
-        if (wasResumed) {
-            try {
-                session.pause()
-                isSessionResumed = false
-            } catch (e: Exception) {
-                Log.e(TAG, "Error pausing session for image database configure: ${e.message}")
-            }
+    private fun applyImageDatabaseSafely(
+        session: Session,
+        imageDatabase: AugmentedImageDatabase,
+        generation: Int
+    ) {
+        if (isShuttingDown() || this.session !== session || sessionGeneration != generation) {
+            return
         }
+        synchronized(sessionLock) {
+            if (isShuttingDown() || this.session !== session || sessionGeneration != generation) {
+                return
+            }
+            val wasResumed = isSessionResumed
+            if (wasResumed) {
+                try {
+                    session.pause()
+                    isSessionResumed = false
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error pausing session for image database configure: ${e.message}")
+                }
+            }
 
-        val config = session.config
-        config.augmentedImageDatabase = imageDatabase
-        session.configure(config)
-
-        if (wasResumed && !isShuttingDown() && renderer.isSurfaceCreated) {
             try {
-                session.resume()
-                isSessionResumed = true
+                val config = session.config
+                config.augmentedImageDatabase = imageDatabase
+                session.configure(config)
             } catch (e: Exception) {
-                Log.e(TAG, "Error resuming session after image database configure: ${e.message}")
+                Log.e(TAG, "Error configuring session with image database: ${e.message}")
+                return
+            }
+
+            if (wasResumed && !isShuttingDown() && this.session === session && renderer.isSurfaceCreated) {
+                try {
+                    session.resume()
+                    isSessionResumed = true
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error resuming session after image database configure: ${e.message}")
+                }
             }
         }
     }
 
     private fun setupImageTrackingAsync(imagePaths: List<String>) {
         val session = session ?: return
+        val generation = sessionGeneration
         imageTrackingExecutor.execute {
             if (isShuttingDown()) {
                 return@execute
@@ -1760,13 +1813,13 @@ internal class AndroidARView(
                 if (cachedBytes != null) {
                     cachedImageDatabaseBytes[cacheKey] = cachedBytes
                     activity.runOnUiThread {
-                        if (isShuttingDown()) {
+                        if (isShuttingDown() || this@AndroidARView.session !== session || sessionGeneration != generation) {
                             return@runOnUiThread
                         }
                         try {
                             val inputStream = ByteArrayInputStream(cachedBytes)
                             val imageDatabase = AugmentedImageDatabase.deserialize(session, inputStream)
-                            applyImageDatabaseSafely(session, imageDatabase)
+                            applyImageDatabaseSafely(session, imageDatabase, generation)
                             sessionManagerChannel.invokeMethod(
                                 "onImageTrackingConfigured",
                                 mapOf("success" to true, "cached" to true)
@@ -1792,11 +1845,11 @@ internal class AndroidARView(
                 getImageDatabaseCacheFile(cacheKey).writeBytes(bytes)
 
                 activity.runOnUiThread {
-                    if (isShuttingDown()) {
+                    if (isShuttingDown() || this@AndroidARView.session !== session || sessionGeneration != generation) {
                         return@runOnUiThread
                     }
                     try {
-                        applyImageDatabaseSafely(session, imageDatabase)
+                        applyImageDatabaseSafely(session, imageDatabase, generation)
                         sessionManagerChannel.invokeMethod(
                             "onImageTrackingConfigured",
                             mapOf("success" to success)
@@ -1834,6 +1887,7 @@ internal class AndroidARView(
 
     private fun setupImageTrackingAsync(imageByteMap: Map<String, ByteArray>) {
         val session = session ?: return
+        val generation = sessionGeneration
         imageTrackingExecutor.execute {
             if (isShuttingDown()) {
                 return@execute
@@ -1845,13 +1899,13 @@ internal class AndroidARView(
                 if (cachedBytes != null) {
                     cachedImageDatabaseBytes[cacheKey] = cachedBytes
                     activity.runOnUiThread {
-                        if (isShuttingDown()) {
+                        if (isShuttingDown() || this@AndroidARView.session !== session || sessionGeneration != generation) {
                             return@runOnUiThread
                         }
                         try {
                             val inputStream = ByteArrayInputStream(cachedBytes)
                             val imageDatabase = AugmentedImageDatabase.deserialize(session, inputStream)
-                            applyImageDatabaseSafely(session, imageDatabase)
+                            applyImageDatabaseSafely(session, imageDatabase, generation)
                             sessionManagerChannel.invokeMethod(
                                 "onImageTrackingConfigured",
                                 mapOf("success" to true, "cached" to true)
@@ -1877,11 +1931,11 @@ internal class AndroidARView(
                 getImageDatabaseCacheFile(cacheKey).writeBytes(bytes)
 
                 activity.runOnUiThread {
-                    if (isShuttingDown()) {
+                    if (isShuttingDown() || this@AndroidARView.session !== session || sessionGeneration != generation) {
                         return@runOnUiThread
                     }
                     try {
-                        applyImageDatabaseSafely(session, imageDatabase)
+                        applyImageDatabaseSafely(session, imageDatabase, generation)
                         sessionManagerChannel.invokeMethod(
                             "onImageTrackingConfigured",
                             mapOf("success" to success)
@@ -1919,6 +1973,7 @@ internal class AndroidARView(
 
     private fun setupImageTrackingAsync(imageDbPath: String) {
         val session = session ?: return
+        val generation = sessionGeneration
         imageTrackingExecutor.execute {
             if (isShuttingDown()) {
                 return@execute
@@ -1927,11 +1982,11 @@ internal class AndroidARView(
                 val (imageDatabase, success) = buildImageDatabase(session, imageDbPath)
 
                 activity.runOnUiThread {
-                    if (isShuttingDown()) {
+                    if (isShuttingDown() || this@AndroidARView.session !== session || sessionGeneration != generation) {
                         return@runOnUiThread
                     }
                     try {
-                        applyImageDatabaseSafely(session, imageDatabase)
+                        applyImageDatabaseSafely(session, imageDatabase, generation)
                         sessionManagerChannel.invokeMethod(
                             "onImageTrackingConfigured",
                             mapOf("success" to success)
@@ -2054,7 +2109,9 @@ internal class AndroidARView(
                     }
                 }
                 applyDisplayGeometryIfAvailable()
-                val frame = session?.update() ?: return
+                val frame = synchronized(sessionLock) {
+                    session?.update()
+                } ?: return
                 currentFrame = frame
                 handleQueuedTap(frame)
                 onFrameUpdateListener?.invoke(frame.timestamp)
