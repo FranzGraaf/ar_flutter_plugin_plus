@@ -2,10 +2,12 @@ import Flutter
 import UIKit
 import Foundation
 import ARKit
+import CoreLocation
 import Combine
 import ARCoreCloudAnchors
+import ARCoreGeospatial
 
-class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureRecognizerDelegate, ARSessionDelegate {
+class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureRecognizerDelegate, ARSessionDelegate, CLLocationManagerDelegate {
     let sceneView: ARSCNView
     let coachingView: ARCoachingOverlayView
     let sessionManagerChannel: FlutterMethodChannel
@@ -22,6 +24,8 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
     private var cloudAnchorHandler: CloudAnchorHandler? = nil
     private var arcoreSession: GARSession? = nil
     private var arcoreMode: Bool = false
+    private var geospatialModeEnabled: Bool = false
+    private var locationManager: CLLocationManager? = nil
     private var configuration: ARWorldTrackingConfiguration!
     private var tappedPlaneAnchorAlignment = ARPlaneAnchor.Alignment.horizontal // default alignment
 
@@ -130,6 +134,34 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
                 applyLightIntensityMultiplier(arguments?["multiplier"] as? NSNumber)
                 result(nil)
                 break
+            case "enableGeospatialMode":
+                guard let apiKey = arguments?["apiKey"] as? String else {
+                    sessionManagerChannel.invokeMethod("onError", arguments: ["An API key is required to enable geospatial mode on iOS"])
+                    result(false)
+                    break
+                }
+                do {
+                    arcoreSession = try GARSession(apiKey: apiKey, bundleIdentifier: nil)
+                } catch {
+                    sessionManagerChannel.invokeMethod("onError", arguments: ["Error initializing Google AR Session: \(error)"])
+                    result(false)
+                    break
+                }
+                if !(arcoreSession?.isGeospatialModeSupported(.enabled) ?? false) {
+                    result(false)
+                    break
+                }
+                // ARCore does not request location permission itself; the geospatial configuration
+                // is rejected until the user grants it, so it is applied from the authorization callback
+                locationManager = CLLocationManager()
+                locationManager!.delegate = self
+                if locationManager!.authorizationStatus == .notDetermined {
+                    locationManager!.requestWhenInUseAuthorization()
+                } else {
+                    locationManagerDidChangeAuthorization(locationManager!)
+                }
+                result(true)
+                break
             case "dispose":
                 onDispose(result)
                 result(nil)
@@ -230,6 +262,9 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
                 if (arcoreSession != nil){
                     let configuration = GARSessionConfiguration();
                     configuration.cloudAnchorMode = .enabled;
+                    if geospatialModeEnabled {
+                        configuration.geospatialMode = .enabled;
+                    }
                     arcoreSession?.setConfiguration(configuration, error: nil);
                     if let token = JWTGenerator().generateWebToken(){
                         arcoreSession!.setAuthToken(token)
@@ -450,11 +485,60 @@ class IosARView: NSObject, FlutterPlatformView, ARSCNViewDelegate, UIGestureReco
     func session(_ session: ARSession, didUpdate frame: ARFrame) {
         if (arcoreMode) {
             do {
-                try arcoreSession!.update(frame)
+                let garFrame = try arcoreSession!.update(frame)
+                if geospatialModeEnabled {
+                    sendCameraGeospatialPose(garFrame)
+                }
             } catch {
                 print(error)
             }
         }
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            configureGeospatialMode()
+        case .denied, .restricted:
+            sessionManagerChannel.invokeMethod("onError", arguments: ["Location permission is required to use geospatial mode"])
+        default:
+            break
+        }
+    }
+
+    private func configureGeospatialMode() {
+        guard !geospatialModeEnabled, let arcoreSession = arcoreSession else {
+            return
+        }
+        let configuration = GARSessionConfiguration()
+        configuration.geospatialMode = .enabled
+        var error: NSError? = nil
+        arcoreSession.setConfiguration(configuration, error: &error)
+        if let error = error {
+            sessionManagerChannel.invokeMethod("onError", arguments: ["Error enabling geospatial mode: \(error.localizedDescription)"])
+            return
+        }
+        geospatialModeEnabled = true
+        arcoreMode = true
+    }
+
+    private func sendCameraGeospatialPose(_ garFrame: GARFrame) {
+        guard let earth = garFrame.earth,
+              earth.trackingState == .tracking,
+              let geospatialTransform = earth.cameraGeospatialTransform else {
+            return
+        }
+        let quaternion = geospatialTransform.eastUpSouthQTarget
+        var map = Dictionary<String, Any>()
+        map["latitude"] = geospatialTransform.coordinate.latitude
+        map["longitude"] = geospatialTransform.coordinate.longitude
+        map["altitude"] = geospatialTransform.altitude
+        map["eastUpSouthQuaternion"] = [quaternion.imag.x, quaternion.imag.y, quaternion.imag.z, quaternion.real]
+        map["horizontalAccuracy"] = geospatialTransform.horizontalAccuracy
+        map["orientationYawAccuracy"] = geospatialTransform.orientationYawAccuracy
+        map["verticalAccuracy"] = geospatialTransform.verticalAccuracy
+
+        sessionManagerChannel.invokeMethod("onCameraGeospatialPoseDetected", arguments: map)
     }
 
     func addNode(dict_node: Dictionary<String, Any>, dict_anchor: Dictionary<String, Any>? = nil) -> Future<Bool, Never> {
