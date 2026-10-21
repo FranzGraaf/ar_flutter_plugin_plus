@@ -1,10 +1,12 @@
 import 'dart:math' show sqrt;
 import 'package:ar_flutter_plugin_plus/datatypes/config_planedetection.dart';
 import 'package:ar_flutter_plugin_plus/models/ar_anchor.dart';
+import 'package:ar_flutter_plugin_plus/models/ar_geospatial_pose.dart';
 import 'package:ar_flutter_plugin_plus/models/ar_hittest_result.dart';
 import 'package:ar_flutter_plugin_plus/utils/json_converters.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 // Type definitions to enforce a consistent use of the API
@@ -13,6 +15,8 @@ typedef ARImageDetectionResultHandler = void Function(
     String imageName, Matrix4 transformation, double width, double height);
 typedef ARTrackingStateHandler = void Function(String state, String reason);
 typedef ARImageTrackingConfiguredHandler = void Function(bool success);
+typedef ARCameraGeospatialPoseHandler = void Function(
+    ARGeospatialPose cameraGeospatialPose);
 
 /// Manages the session configuration, parameters and events of an [ARView]
 class ARSessionManager {
@@ -39,6 +43,9 @@ class ARSessionManager {
 
   /// Receives a callback when image tracking database configuration finishes
   ARImageTrackingConfiguredHandler? onImageTrackingConfigured;
+
+  /// Receives the camera geospatial pose on every frame while geospatial mode is enabled and Earth is tracking
+  ARCameraGeospatialPoseHandler? onCameraGeospatialPoseDetected;
 
   ARSessionManager(int id, this.buildContext, this.planeDetectionConfig,
       {this.debug = false}) {
@@ -160,6 +167,13 @@ class ARSessionManager {
             onImageTrackingConfigured!(success);
           }
           break;
+        case 'onCameraGeospatialPoseDetected':
+          if (onCameraGeospatialPoseDetected != null) {
+            final pose = ARGeospatialPose.fromMap(
+                call.arguments as Map<dynamic, dynamic>);
+            onCameraGeospatialPoseDetected!(pose);
+          }
+          break;
         case 'dispose':
           _channel.invokeMethod<void>("dispose");
           break;
@@ -257,6 +271,34 @@ class ARSessionManager {
       });
     } catch (e) {
       print('Error caught: ' + e.toString());
+    }
+  }
+
+  /// Enables the ARCore Geospatial API for this session.
+  ///
+  /// Once enabled, [onCameraGeospatialPoseDetected] is called with the camera
+  /// geospatial pose on every frame in which Earth is tracking.
+  ///
+  /// - [iosApiKey]: Google Cloud API key. Required on iOS; on Android the key is
+  ///   read from the `com.google.android.ar.API_KEY` meta-data in the app manifest.
+  ///
+  /// Returns false if geospatial mode is not supported on this device.
+  ///
+  /// Example usage:
+  /// ```dart
+  /// enableGeospatialMode(iosApiKey: 'your-ios-api-key'); // Required for iOS
+  /// enableGeospatialMode(); // Works on Android without API key
+  /// ```
+  Future<bool> enableGeospatialMode({String? iosApiKey}) async {
+    try {
+      // ARCore needs precise location for geospatial tracking but does not request it itself
+      await Permission.locationWhenInUse.request();
+      final result = await _channel.invokeMethod<bool>(
+          'enableGeospatialMode', {'apiKey': iosApiKey});
+      return result ?? false;
+    } catch (e) {
+      print('Error caught: ' + e.toString());
+      return false;
     }
   }
 

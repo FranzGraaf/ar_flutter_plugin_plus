@@ -108,6 +108,7 @@ internal class AndroidARView(
     private val lastAugmentedImageUpdateMs: MutableMap<String, Long> = mutableMapOf()
     private var continuousImageTracking = false
     private var imageTrackingUpdateIntervalMs: Long = 100
+    private var geospatialModeEnabled = false
 
     private val nonTrackingResetThreshold = 30
     private val modelIoExecutor = Executors.newFixedThreadPool(2)
@@ -201,6 +202,38 @@ internal class AndroidARView(
                                 result.success(serializePose(cameraPose))
                             } else {
                                 result.error("Error", "could not get camera pose", null)
+                            }
+                        }
+                        "enableGeospatialMode" -> {
+                            val session = session
+                            if (session == null) {
+                                // Session is not created yet; geospatial mode is applied in initializeARView
+                                geospatialModeEnabled = true
+                                result.success(true)
+                            } else if (session.isGeospatialModeSupported(Config.GeospatialMode.ENABLED)) {
+                                val config = session.config
+                                config.geospatialMode = Config.GeospatialMode.ENABLED
+                                // Enabling geospatial mode on a running session leaves the camera feed black,
+                                // so the session is paused while it is reconfigured
+                                val wasResumed = isSessionResumed
+                                if (wasResumed) {
+                                    session.pause()
+                                    isSessionResumed = false
+                                }
+                                try {
+                                    session.configure(config)
+                                    geospatialModeEnabled = true
+                                    result.success(true)
+                                } catch (e: FineLocationPermissionNotGrantedException) {
+                                    sessionManagerChannel.invokeMethod("onError", listOf("Location permission is required to use geospatial mode"))
+                                    result.success(false)
+                                } finally {
+                                    if (wasResumed) {
+                                        resumeSessionInternal()
+                                    }
+                                }
+                            } else {
+                                result.success(false)
                             }
                         }
                         "snapshot" -> {
@@ -348,6 +381,9 @@ internal class AndroidARView(
                                 config.cloudAnchorMode = Config.CloudAnchorMode.ENABLED
                                 config.updateMode = Config.UpdateMode.LATEST_CAMERA_IMAGE
                                 config.focusMode = Config.FocusMode.AUTO
+                                if (geospatialModeEnabled) {
+                                    config.geospatialMode = Config.GeospatialMode.ENABLED
+                                }
                                 session?.configure(config)
 
                                 cloudAnchorHandler = CloudAnchorHandler(session!!)
@@ -622,6 +658,9 @@ internal class AndroidARView(
         config.depthMode = Config.DepthMode.DISABLED
         config.updateMode = Config.UpdateMode.BLOCKING
         config.focusMode = Config.FocusMode.AUTO
+        if (geospatialModeEnabled && session!!.isGeospatialModeSupported(Config.GeospatialMode.ENABLED)) {
+            config.geospatialMode = Config.GeospatialMode.ENABLED
+        }
         session!!.configure(config)
 
         // Configure image tracking
@@ -686,7 +725,29 @@ internal class AndroidARView(
         // Check for image tracking
         checkForTrackedImages()
 
+        if (geospatialModeEnabled) {
+            sendCameraGeospatialPose()
+        }
+    }
 
+    private fun sendCameraGeospatialPose() {
+        // Earth is null while geospatial mode is disabled
+        val earth = session?.earth ?: return
+        if (earth.trackingState != TrackingState.TRACKING) return
+
+        val cameraGeospatialPose = earth.cameraGeospatialPose
+        val map: HashMap<String, Any> = HashMap()
+        map["latitude"] = cameraGeospatialPose.latitude
+        map["longitude"] = cameraGeospatialPose.longitude
+        map["altitude"] = cameraGeospatialPose.altitude
+        map["eastUpSouthQuaternion"] = cameraGeospatialPose.eastUpSouthQuaternion
+        map["horizontalAccuracy"] = cameraGeospatialPose.horizontalAccuracy
+        map["orientationYawAccuracy"] = cameraGeospatialPose.orientationYawAccuracy
+        map["verticalAccuracy"] = cameraGeospatialPose.verticalAccuracy
+
+        activity.runOnUiThread {
+            sessionManagerChannel.invokeMethod("onCameraGeospatialPoseDetected", map)
+        }
     }
 
     private fun addNode(dict_node: HashMap<String, Any>, dict_anchor: HashMap<String, Any>? = null): CompletableFuture<Boolean>{
