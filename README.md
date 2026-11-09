@@ -41,6 +41,10 @@ Add this to your code:
 import 'package:ar_flutter_plugin_plus/ar_flutter_plugin_plus.dart';
 ```
 
+### iOS: Swift Package Manager
+
+The iOS implementation supports both [Swift Package Manager](https://docs.flutter.dev/packages-and-plugins/swift-package-manager/for-app-developers) and CocoaPods. When Swift Package Manager is enabled in your Flutter project, the native dependencies (ARCore Cloud Anchors / Geospatial, GLTFSceneKit, SwiftJWT) are resolved through SPM automatically; otherwise CocoaPods is used. The minimum iOS version is 15.0.
+
 If you have problems with permissions on iOS (e.g. with the camera view not showing up even though camera access is allowed), add this to the `podfile` of your app's `ios` directory:
 
 ```pod

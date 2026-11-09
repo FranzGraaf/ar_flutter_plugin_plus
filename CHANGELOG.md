@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Added Swift Package Manager support for iOS. CocoaPods remains supported.
+- iOS plugin class renamed from `ArFlutterPluginPlus` (Objective-C shim) to `SwiftArFlutterPluginPlus`; the generated plugin registrant picks this up automatically.
+
 ## 1.1.3
 
 - additional scaling options

@@ -13,7 +13,7 @@ A Flutter plugin for AR experiences supporting Android and iOS.
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Franz Graaf' => 'franz@xinix.tech' }
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  s.source_files = 'ar_flutter_plugin_plus/Sources/ar_flutter_plugin_plus/**/*.swift'
   s.dependency 'Flutter'
   s.dependency 'GLTFSceneKit'
   s.dependency 'SwiftJWT'

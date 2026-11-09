@@ -31,6 +31,6 @@ flutter:
         package: tech.graaf.franz.ar_flutter_plugin_plus
         pluginClass: ArFlutterPluginPlus
       ios:
-        pluginClass: ArFlutterPluginPlus
+        pluginClass: SwiftArFlutterPluginPlus
   assets:
     - assets/image_unlit.filamat
