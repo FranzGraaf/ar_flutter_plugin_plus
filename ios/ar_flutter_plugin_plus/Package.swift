@@ -13,7 +13,7 @@ let package = Package(
     ],
     dependencies: [
         .package(name: "FlutterFramework", path: "../FlutterFramework"),
-        .package(url: "https://github.com/google-ar/arcore-ios-sdk.git", from: "1.51.0"),
+        .package(url: "https://github.com/google-ar/arcore-ios-sdk.git", from: "1.57.1"),
         .package(url: "https://github.com/magicien/GLTFSceneKit.git", from: "0.4.0"),
         .package(url: "https://github.com/Kitura/Swift-JWT.git", from: "4.0.0"),
     ],
