@@ -13,15 +13,15 @@ A Flutter plugin for AR experiences supporting Android and iOS.
   s.license          = { :file => '../LICENSE' }
   s.author           = { 'Franz Graaf' => 'franz@xinix.tech' }
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  s.source_files = 'ar_flutter_plugin_plus/Sources/ar_flutter_plugin_plus/**/*.swift'
   s.dependency 'Flutter'
   s.dependency 'GLTFSceneKit'
   s.dependency 'SwiftJWT'
   s.static_framework = true
   #s.dependency 'ARCore/CloudAnchors', '~> 1.12.0'
   #s.dependency 'ARCore', '~> 1.2.0'
-  s.dependency 'ARCore/CloudAnchors', '~> 1.51.0' # Updated to support Firebase 12.x
-  s.dependency 'ARCore/Geospatial', '~> 1.51.0'
+  s.dependency 'ARCore/CloudAnchors', '~> 1.57.1'
+  s.dependency 'ARCore/Geospatial', '~> 1.57.1'
   s.platform = :ios, '15.0'
 
 
