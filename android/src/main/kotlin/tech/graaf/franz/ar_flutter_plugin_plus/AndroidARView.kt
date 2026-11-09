@@ -123,6 +123,13 @@ internal class AndroidARView(
     private val anchorsByName: MutableMap<String, Anchor> = mutableMapOf()
     private val anchorChildren: MutableMap<String, MutableList<String>> = mutableMapOf()
     private val anchorTransformsByName: MutableMap<String, FloatArray> = mutableMapOf()
+
+    // [gltf patch] Matriz de modelo final de cada nó (para picking de toque)
+    // e estado de detecção de plano horizontal enviado ao Dart.
+    private val lastModelMatrices: MutableMap<String, FloatArray> =
+        java.util.concurrent.ConcurrentHashMap()
+    private var lastPlaneDetected = false
+    private var planeCheckFrame = 0
     // Cloud anchor handler
     private lateinit var cloudAnchorHandler: CloudAnchorHandler
 
@@ -326,6 +333,7 @@ internal class AndroidARView(
                             val nodeName: String? = call.argument<String>("name")
                             nodeName?.let{
                                 nodesByName.remove(nodeName)
+                                lastModelMatrices.remove(nodeName)
                                 anchorChildren.values.forEach { it.remove(nodeName) }
                                 modelRenderer.removeModel(nodeName)
                                 result.success(null)
@@ -453,6 +461,12 @@ internal class AndroidARView(
         glSurfaceView.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
 
         modelRenderer = ModelRenderer()
+        modelRenderer.onModelLoaded = { name, success ->
+            objectManagerChannel.invokeMethod(
+                "onModelLoaded",
+                mapOf("name" to name, "success" to success)
+            )
+        }
 
         rootView.addView(glSurfaceView)
 
@@ -760,7 +774,13 @@ internal class AndroidARView(
             val uri = dict_node["uri"] as String
 
             val anchorName: String? = dict_anchor?.get("name") as? String
-            nodesByName[nodeName] = SimpleNode(nodeName, transformation, nodeType, uri, anchorName)
+            // [gltf patch] Opções opt-in vindas de ARNode.data.
+            val data = dict_node["data"] as? Map<*, *>
+            val animation = data?.get("animation") as? String
+            val tappable = data?.get("tappable") as? Boolean ?: false
+            nodesByName[nodeName] = SimpleNode(
+                nodeName, transformation, nodeType, uri, anchorName, animation, tappable
+            )
 
             if (anchorName != null) {
                 val children = anchorChildren.getOrPut(anchorName) { mutableListOf() }
@@ -794,25 +814,25 @@ internal class AndroidARView(
                         val resourceMap = loadGltfResourcesFromAssets(gltfBytes, basePath)
                         // Parsing glTF with external resources is not yet wired; keep step-by-step.
                         glSurfaceView.queueEvent {
-                            modelRenderer.loadGltf(node.name, gltfBytes, resourceMap)
+                            modelRenderer.loadGltf(node.name, gltfBytes, resourceMap, node.animation)
                         }
                     }
                     1 -> { // localGLB
                         val glbBytes = readFlutterAssetBytes(node.uri)
                         glSurfaceView.queueEvent {
-                            modelRenderer.loadGlb(node.name, glbBytes)
+                            modelRenderer.loadGlb(node.name, glbBytes, node.animation)
                         }
                     }
                     2 -> { // webGLB
                         val glbBytes = readUrlBytes(node.uri)
                         glSurfaceView.queueEvent {
-                            modelRenderer.loadGlb(node.name, glbBytes)
+                            modelRenderer.loadGlb(node.name, glbBytes, node.animation)
                         }
                     }
                     3 -> { // fileSystemAppFolderGLB
                         val glbBytes = readFileBytes(node.uri)
                         glSurfaceView.queueEvent {
-                            modelRenderer.loadGlb(node.name, glbBytes)
+                            modelRenderer.loadGlb(node.name, glbBytes, node.animation)
                         }
                     }
                     4 -> { // fileSystemAppFolderGLTF2
@@ -821,7 +841,7 @@ internal class AndroidARView(
                         val resourceMap = loadGltfResourcesFromFile(gltfBytes, basePath)
                         // Parsing glTF with external resources is not yet wired; keep step-by-step.
                         glSurfaceView.queueEvent {
-                            modelRenderer.loadGltf(node.name, gltfBytes, resourceMap)
+                            modelRenderer.loadGltf(node.name, gltfBytes, resourceMap, node.animation)
                         }
                     }
                     5 -> { // localPNG
@@ -860,6 +880,10 @@ internal class AndroidARView(
             } catch (e: Exception) {
                 activity.runOnUiThread {
                     sessionManagerChannel.invokeMethod("onError", listOf("Error loading model: ${e.message}"))
+                    objectManagerChannel.invokeMethod(
+                        "onModelLoaded",
+                        mapOf("name" to node.name, "success" to false)
+                    )
                 }
             }
         }
@@ -986,8 +1010,10 @@ internal class AndroidARView(
                 Matrix.scaleM(scaleMatrix, 0, modelScaleFactor, modelScaleFactor, modelScaleFactor)
                 Matrix.multiplyMM(scaledModelMatrix, 0, modelMatrix, 0, scaleMatrix, 0)
                 modelRenderer.updateTransform(node.name, scaledModelMatrix)
+                if (node.tappable) lastModelMatrices[node.name] = scaledModelMatrix.clone()
             } else {
                 modelRenderer.updateTransform(node.name, modelMatrix)
+                if (node.tappable) lastModelMatrices[node.name] = modelMatrix.clone()
             }
         }
     }
@@ -1289,7 +1315,7 @@ internal class AndroidARView(
         anchorTransformsByName.remove(name)
     }
 
-    private fun handleQueuedTap(frame: Frame) {
+    private fun handleQueuedTap(frame: Frame, viewportWidth: Int, viewportHeight: Int) {
         val tap = synchronized(tapLock) {
             val value = queuedTap
             queuedTap = null
@@ -1297,6 +1323,16 @@ internal class AndroidARView(
         } ?: return
 
         try {
+            // [gltf patch] Toque em nó 3D marcado como tappable tem prioridade
+            // sobre o toque em plano.
+            val tappedNode = pickTappableNode(frame, tap.x, tap.y, viewportWidth, viewportHeight)
+            if (tappedNode != null) {
+                activity.runOnUiThread {
+                    objectManagerChannel.invokeMethod("onNodeTap", listOf(tappedNode))
+                }
+                return
+            }
+
             val allHitResults = frame.hitTest(tap)
             val planeAndPointHitResults = allHitResults.filter { hit ->
                 when (val trackable = hit.trackable) {
@@ -1318,6 +1354,99 @@ internal class AndroidARView(
             }
         } finally {
             tap.recycle()
+        }
+    }
+
+    /**
+     * [gltf patch] Raio da câmera pelo ponto tocado contra a esfera
+     * envolvente (caixa do asset × escala do nó) de cada nó tappable.
+     * Devolve o nó mais próximo da câmera, ou null.
+     */
+    private fun pickTappableNode(
+        frame: Frame,
+        x: Float,
+        y: Float,
+        viewportWidth: Int,
+        viewportHeight: Int,
+    ): String? {
+        if (viewportWidth <= 0 || viewportHeight <= 0) return null
+        val candidates = try {
+            nodesByName.values.filter { it.tappable }
+        } catch (e: ConcurrentModificationException) {
+            return null
+        }
+        if (candidates.isEmpty()) return null
+
+        val view = FloatArray(16)
+        val proj = FloatArray(16)
+        frame.camera.getViewMatrix(view, 0)
+        frame.camera.getProjectionMatrix(proj, 0, 0.1f, 100.0f)
+        val viewProj = FloatArray(16)
+        Matrix.multiplyMM(viewProj, 0, proj, 0, view, 0)
+        val inv = FloatArray(16)
+        if (!Matrix.invertM(inv, 0, viewProj, 0)) return null
+
+        val ndcX = 2f * x / viewportWidth - 1f
+        val ndcY = 1f - 2f * y / viewportHeight
+        val near = unproject(inv, ndcX, ndcY, -1f)
+        val far = unproject(inv, ndcX, ndcY, 1f)
+        val dir = floatArrayOf(far[0] - near[0], far[1] - near[1], far[2] - near[2])
+        val dirLen = Matrix.length(dir[0], dir[1], dir[2])
+        if (dirLen < 1e-6f) return null
+        for (i in 0..2) dir[i] /= dirLen
+
+        var best: String? = null
+        var bestT = Float.MAX_VALUE
+        for (node in candidates) {
+            val model = lastModelMatrices[node.name] ?: continue
+            val box = modelRenderer.boundingBoxes[node.name] ?: continue
+            val scale = maxOf(
+                Matrix.length(model[0], model[1], model[2]),
+                Matrix.length(model[4], model[5], model[6]),
+                Matrix.length(model[8], model[9], model[10]),
+            )
+            if (scale < 1e-4f) continue // nó escondido (escala ~0)
+
+            val center = FloatArray(4)
+            Matrix.multiplyMV(center, 0, model, 0, floatArrayOf(box[0], box[1], box[2], 1f), 0)
+            val radius = maxOf(maxOf(box[3], box[4], box[5]) * scale, 0.06f)
+
+            val ocX = center[0] - near[0]
+            val ocY = center[1] - near[1]
+            val ocZ = center[2] - near[2]
+            val t = ocX * dir[0] + ocY * dir[1] + ocZ * dir[2]
+            if (t < 0f) continue
+            val dist2 = ocX * ocX + ocY * ocY + ocZ * ocZ - t * t
+            if (dist2 <= radius * radius && t < bestT) {
+                bestT = t
+                best = node.name
+            }
+        }
+        return best
+    }
+
+    private fun unproject(inv: FloatArray, x: Float, y: Float, z: Float): FloatArray {
+        val out = FloatArray(4)
+        Matrix.multiplyMV(out, 0, inv, 0, floatArrayOf(x, y, z, 1f), 0)
+        val w = if (out[3] != 0f) out[3] else 1f
+        return floatArrayOf(out[0] / w, out[1] / w, out[2] / w)
+    }
+
+    /** [gltf patch] Avisa o Dart quando surge/some um plano horizontal rastreado. */
+    private fun notifyPlaneDetectionIfChanged() {
+        planeCheckFrame++
+        if (planeCheckFrame % 15 != 0) return
+        val planes = session?.getAllTrackables(Plane::class.java) ?: return
+        val detected = planes.any {
+            it.trackingState == TrackingState.TRACKING &&
+                it.subsumedBy == null &&
+                it.type == Plane.Type.HORIZONTAL_UPWARD_FACING
+        }
+        if (detected != lastPlaneDetected) {
+            lastPlaneDetected = detected
+            activity.runOnUiThread {
+                sessionManagerChannel.invokeMethod("onPlaneDetected", detected)
+            }
         }
     }
 
@@ -1828,7 +1957,8 @@ internal class AndroidARView(
                 applyDisplayGeometryIfAvailable()
                 val frame = session?.update() ?: return
                 currentFrame = frame
-                handleQueuedTap(frame)
+                handleQueuedTap(frame, viewportWidth, viewportHeight)
+                notifyPlaneDetectionIfChanged()
                 onFrameUpdateListener?.invoke(frame.timestamp)
                 val camera = frame.camera
                 val cameraTrackingState = camera.trackingState
@@ -1930,7 +2060,9 @@ internal class AndroidARView(
         var transformation: ArrayList<Double>,
         val type: Int,
         val uri: String,
-        var anchorName: String?
+        var anchorName: String?,
+        val animation: String? = null,
+        val tappable: Boolean = false,
     )
 
 }
