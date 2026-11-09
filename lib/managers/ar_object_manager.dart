@@ -11,6 +11,7 @@ typedef NodePanEndHandler = void Function(String node, Matrix4 transform);
 typedef NodeRotationStartHandler = void Function(String node);
 typedef NodeRotationChangeHandler = void Function(String node);
 typedef NodeRotationEndHandler = void Function(String node, Matrix4 transform);
+typedef NodeModelLoadedHandler = void Function(String node, bool success);
 
 /// Manages the all node-related actions of an [ARView]
 class ARObjectManager {
@@ -28,6 +29,10 @@ class ARObjectManager {
   NodeRotationStartHandler? onRotationStart;
   NodeRotationChangeHandler? onRotationChange;
   NodeRotationEndHandler? onRotationEnd;
+
+  /// [gltf patch, Android] Disparado quando o modelo 3D de um nó termina
+  /// de carregar (ou falha). `addNode` retorna antes disso.
+  NodeModelLoadedHandler? onModelLoaded;
 
   ARObjectManager(int id, {this.debug = false}) {
     _channel = MethodChannel('arobjects_$id');
@@ -52,6 +57,12 @@ class ARObjectManager {
             onNodeTap!(tappedNodes
                 .map((tappedNode) => tappedNode.toString())
                 .toList());
+          }
+          break;
+        case 'onModelLoaded':
+          if (onModelLoaded != null) {
+            final args = call.arguments as Map<dynamic, dynamic>;
+            onModelLoaded!(args['name'] as String, args['success'] == true);
           }
           break;
         case 'onPanStart':

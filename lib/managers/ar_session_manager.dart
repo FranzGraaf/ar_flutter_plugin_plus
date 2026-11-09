@@ -44,6 +44,10 @@ class ARSessionManager {
   /// Receives a callback when image tracking database configuration finishes
   ARImageTrackingConfiguredHandler? onImageTrackingConfigured;
 
+  /// [gltf patch, Android] Chamado quando passa a existir (true) ou deixa
+  /// de existir (false) ao menos um plano horizontal rastreado.
+  void Function(bool detected)? onPlaneDetected;
+
   /// Receives the camera geospatial pose on every frame while geospatial mode is enabled and Earth is tracking
   ARCameraGeospatialPoseHandler? onCameraGeospatialPoseDetected;
 
@@ -159,6 +163,9 @@ class ARSessionManager {
             final reason = arguments['reason'] as String? ?? 'NONE';
             onTrackingStateChanged!(state, reason);
           }
+          break;
+        case 'onPlaneDetected':
+          onPlaneDetected?.call(call.arguments == true);
           break;
         case 'onImageTrackingConfigured':
           if (onImageTrackingConfigured != null) {

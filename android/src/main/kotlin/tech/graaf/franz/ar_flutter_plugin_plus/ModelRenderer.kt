@@ -10,6 +10,7 @@ import android.view.Surface
 import android.view.TextureView
 import com.google.android.filament.*
 import com.google.android.filament.android.UiHelper
+import com.google.android.filament.gltfio.Animator
 import com.google.android.filament.gltfio.AssetLoader
 import com.google.android.filament.gltfio.FilamentAsset
 import com.google.android.filament.gltfio.Gltfio
@@ -18,6 +19,7 @@ import com.google.android.filament.gltfio.ResourceLoader
 import com.google.android.filament.gltfio.UbershaderProvider
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.atan
 
 internal class ModelRenderer {
@@ -65,6 +67,22 @@ internal class ModelRenderer {
 
     private val modelAssets: MutableMap<String, ModelAsset> = mutableMapOf()
     private val pendingTransforms: MutableMap<String, FloatArray> = mutableMapOf()
+
+    // [gltf patch] Animação glTF em loop, só para nós que pedirem uma.
+    private class LoopingAnimation(
+        val animator: Animator,
+        val index: Int,
+        val duration: Float,
+        val startNanos: Long,
+    )
+    private val animations: MutableMap<String, LoopingAnimation> = mutableMapOf()
+
+    // [gltf patch] Caixa local (center xyz + halfExtent xyz) por nó, lida
+    // da thread GL no picking de toque — por isso concorrente.
+    val boundingBoxes: MutableMap<String, FloatArray> = ConcurrentHashMap()
+
+    // [gltf patch] Chamado na main thread quando o modelo carrega ou falha.
+    var onModelLoaded: ((name: String, success: Boolean) -> Unit)? = null
 
     fun attachTextureView(textureView: TextureView) {
         if (this.textureView === textureView) return
@@ -143,6 +161,7 @@ internal class ModelRenderer {
     fun loadGlb(
         name: String,
         data: ByteArray,
+        animationName: String? = null,
     ) {
         mainHandler.post {
             ensureEngine()
@@ -157,16 +176,21 @@ internal class ModelRenderer {
             val asset = assetLoader.createAsset(buffer)
             if (asset == null) {
                 Log.e(tag, "Failed to create GLB asset for $name")
+                onModelLoaded?.invoke(name, false)
                 return@post
             }
             resourceLoader.loadResources(asset)
+            // O Animator precisa ser obtido antes de releaseSourceData().
+            registerAnimation(name, asset, animationName)
             asset.releaseSourceData()
             scene.addEntities(asset.entities)
             val modelAsset = ModelAsset(asset, asset.root, asset.entities)
             modelAssets[name] = modelAsset
+            storeBoundingBox(name, asset)
             pendingTransforms[name]?.let { transform ->
                 applyTransform(modelAsset, transform)
             }
+            onModelLoaded?.invoke(name, true)
         }
     }
 
@@ -174,6 +198,7 @@ internal class ModelRenderer {
         name: String,
         json: ByteArray,
         resources: Map<String, ByteArray>,
+        animationName: String? = null,
     ) {
         mainHandler.post {
             ensureEngine()
@@ -188,6 +213,7 @@ internal class ModelRenderer {
             val asset = assetLoader.createAsset(jsonBuffer)
             if (asset == null) {
                 Log.e(tag, "Failed to create glTF asset for $name")
+                onModelLoaded?.invoke(name, false)
                 return@post
             }
 
@@ -200,14 +226,57 @@ internal class ModelRenderer {
 
             resourceLoader.loadResources(asset)
             resourceLoader.evictResourceData()
+            registerAnimation(name, asset, animationName)
             asset.releaseSourceData()
             scene.addEntities(asset.entities)
             val modelAsset = ModelAsset(asset, asset.root, asset.entities)
             modelAssets[name] = modelAsset
+            storeBoundingBox(name, asset)
             pendingTransforms[name]?.let { transform ->
                 applyTransform(modelAsset, transform)
             }
+            onModelLoaded?.invoke(name, true)
         }
+    }
+
+    private fun registerAnimation(name: String, asset: FilamentAsset, animationName: String?) {
+        if (animationName == null) return
+        val animator = asset.instance?.animator ?: return
+        val count = animator.animationCount
+        if (count == 0) return
+        val index = (0 until count).firstOrNull { animator.getAnimationName(it) == animationName } ?: 0
+        animations[name] = LoopingAnimation(
+            animator,
+            index,
+            animator.getAnimationDuration(index),
+            System.nanoTime(),
+        )
+    }
+
+    private fun storeBoundingBox(name: String, asset: FilamentAsset) {
+        val box = asset.boundingBox
+        val c = box.center
+        val h = box.halfExtent
+        boundingBoxes[name] = floatArrayOf(c[0], c[1], c[2], h[0], h[1], h[2])
+    }
+
+    private fun updateAnimations() {
+        if (animations.isEmpty()) return
+        val now = System.nanoTime()
+        val failed = mutableListOf<String>()
+        for ((name, anim) in animations) {
+            // [gltf patch] Um clipe defeituoso não pode derrubar os demais.
+            try {
+                val elapsed = (now - anim.startNanos) / 1_000_000_000f
+                val t = if (anim.duration > 0f) elapsed % anim.duration else 0f
+                anim.animator.applyAnimation(anim.index, t)
+                anim.animator.updateBoneMatrices()
+            } catch (e: Exception) {
+                Log.w(tag, "animação de $name falhou: $e")
+                failed.add(name)
+            }
+        }
+        failed.forEach { animations.remove(it) }
     }
 
     fun loadImage(
@@ -428,6 +497,8 @@ internal class ModelRenderer {
             val scene = scene ?: return@post
             val engine = engine ?: return@post
             val asset = modelAssets.remove(name) ?: return@post
+            animations.remove(name)
+            boundingBoxes.remove(name)
             scene.removeEntities(asset.entities)
             asset.filamentAsset?.let { assetLoader?.destroyAsset(it) }
             
@@ -462,6 +533,8 @@ internal class ModelRenderer {
 
             val engine = engine ?: return@post
 
+            animations.clear()
+            boundingBoxes.clear()
             val renderableManager = engine.renderableManager
             modelAssets.values.forEach { asset ->
                 scene?.removeEntities(asset.entities)
@@ -654,6 +727,8 @@ internal class ModelRenderer {
         val fovY = 2.0 * atan(1.0 / m11)
         val fovDegrees = Math.toDegrees(fovY)
         camera.setProjection(fovDegrees, aspect, 0.1, 100.0, Camera.Fov.VERTICAL)
+
+        updateAnimations()
 
         if (renderer.beginFrame(swapChain, 0L)) {
             renderer.render(view)

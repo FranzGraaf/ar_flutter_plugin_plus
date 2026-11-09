@@ -109,7 +109,9 @@ internal class SimplePlaneRenderer {
             uniform mat4 u_View;
             uniform mat4 u_Proj;
             attribute vec3 a_Position;
+            varying vec2 v_Local;
             void main() {
+                v_Local = a_Position.xz;
                 gl_Position = u_Proj * u_View * u_Model * vec4(a_Position, 1.0);
             }
         """
@@ -117,8 +119,13 @@ internal class SimplePlaneRenderer {
         private const val FRAGMENT_SHADER = """
             precision mediump float;
             uniform vec4 u_Color;
+            varying vec2 v_Local;
+            // [gltf patch] grade de quadrados de 10 cm em vez de polígono liso.
             void main() {
-                gl_FragColor = u_Color;
+                vec2 cell = abs(fract(v_Local / 0.10 + 0.5) - 0.5) * 0.10;
+                float line = 1.0 - step(0.0022, min(cell.x, cell.y));
+                float alpha = mix(u_Color.a * 0.18, 0.85, line);
+                gl_FragColor = vec4(mix(u_Color.rgb, vec3(1.0), line * 0.6), alpha);
             }
         """
     }
